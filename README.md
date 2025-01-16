@@ -1,4 +1,33 @@
-If you need to work on the project again, simply clone it back from GitHub:
+Step 1: Commit and Push Changes to GitHub
+Stage All Changes: If you've made changes to your project files, stage them for a commit:
+
+git add .
+Commit Your Changes: Write a commit message to describe what changes were made:
+
+git commit -m "Update project files"
+Push Changes to GitHub: Push your changes to the main branch on GitHub:
+
+git push origin main
+Step 2: Verify Files on GitHub
+Go to your GitHub repository:
+https://github.com/detailongo/my-next-app
+Confirm that all your files and changes are visible.
+Step 3: Delete Local Files
+Once you’ve confirmed everything is on GitHub, delete the local copy of the project to free up space:
+
+Navigate to your home directory (if not already there):
+
+cd ~
+Remove the my-next-app folder:
+
+rm -rf ~/my-next-app
+Verify that the directory has been deleted:
+
+ls
+Ensure my-next-app is no longer listed.
+
+Step 4: Re-Cloning in the Future
+If you need to work on the project again, you can re-clone it from GitHub:
 
 git clone https://github.com/detailongo/my-next-app.git
 cd my-next-app
