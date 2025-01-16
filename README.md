@@ -1,3 +1,12 @@
+If you need to work on the project again, simply clone it back from GitHub:
+
+bash
+Copy
+Edit
+git clone https://github.com/detailongo/my-next-app.git
+cd my-next-app
+
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
 
 ## Getting Started
