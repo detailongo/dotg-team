@@ -46,7 +46,7 @@ export default function Home() {
         />
 
         <h1 className="text-4xl font-bold text-center bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600">
-          Welcome to Detail On The Go
+          Welcome to Detail On The Go 2
         </h1>
 
         <p className="text-center text-lg font-medium">
