@@ -7,6 +7,27 @@ npm install --legacy-peer-deps
 npm run dev
 
 
+LOGIN TO GITHUB
+gh auth login
+
+CREATE REPO
+gh repo create crmcms --private
+
+Initialize Git in Your Project
+git init
+
+Stage all the files in your project:
+git add .
+
+git commit -m "Initial commit"
+git remote add origin https://github.com/detailongo/crmcms.git
+
+git branch -M main
+git push -u origin main
+
+
+
+
 
 
 Step 1: Commit and Push Changes to GitHub
