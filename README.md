@@ -1,4 +1,4 @@
-git clone https://github.com/detailongo/app.git
+git clone https://github.com/pdovhomilja/nextcrm-app.git
 
 cd app
 
