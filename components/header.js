@@ -98,6 +98,7 @@ const Header = () => {
             <li><NavButton href="/calendar" className="w-full justify-center" onClick={closeMenu}>Calendar</NavButton></li>
             <li><NavButton href="/sms" className="w-full justify-center" onClick={closeMenu}>Messenger</NavButton></li>
             <li><NavButton href="/payments" className="w-full justify-center" onClick={closeMenu}>Payments</NavButton></li>
+            <li><NavButton href="/email" className="w-full justify-center" onClick={closeMenu}>Email</NavButton></li>
             <li><NavButton href="/booking" className="w-full justify-center" onClick={closeMenu}>Book</NavButton></li>
           </ul>
         </nav>

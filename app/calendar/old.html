@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detail Viewer📅</title>
+    <style>
+
+    </style>
+    <link rel="stylesheet" href="../c2.css">
+</head>
+
+<body>
+    <div class="calendar-container">
+        <div class="calendar-header">
+            <div id="currentMonth"></div>
+            <div class="nav-buttons">
+                <button onclick="previousMonth()">&lt; Previous</button>
+                <button onclick="nextMonth()">Next &gt;</button>
+            </div>
+        </div>
+        <div class="calendar-grid" id="calendarGrid">
+            <div class="header">Sun</div>
+            <div class="header">Mon</div>
+            <div class="header">Tue</div>
+            <div class="header">Wed</div>
+            <div class="header">Thu</div>
+            <div class="header">Fri</div>
+            <div class="header">Sat</div>
+        </div>
+    </div>
+
+    <!-- Modal Popup -->
+    <div id="eventModal" class="modal-overlay">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal()">&times;</span>
+            <div id="eventDetails" class="modal-section">
+                <h2>
+                    <input type="text" id="eventTitleInput" value="" />
+                </h2>
+                <div class="modal-body">
+                    <p>
+                        <strong>Time:</strong>
+                        <input type="time" id="eventStartTime" /> -
+                        <input type="time" id="eventEndTime" />
+                    </p>
+                    <p>
+                        <strong>Location:</strong>
+                        <input type="text" id="eventLocationInput" value="" />
+                    </p>
+                    <p>
+                        <strong>Description:</strong>
+                        <textarea id="eventDescriptionInput"></textarea>
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button id="chargeButton" onclick="showChargeForm()">Charge Client</button>
+                    <button onclick="saveEvent()">Save Changes</button>
+                    <button onclick="closeModal()">Close</button>
+                </div>
+            </div>
+
+            <!-- Payment Form Section -->
+            <div id="paymentSection" class="modal-section payment-section" style="display: none;">
+                <h3>Charge Customer</h3>
+                <form id="charge-form">
+                    <!-- Editable Customer ID Field -->
+                    <label for="customerId">Customer Stripe ID</label>
+                    <input type="text" id="customerId" value="" required />
+                    <button type="button" id="search-payment-methods">Search Payment Methods</button>
+
+
+                    <label for="payment-methods">Payment Methods</label>
+                    <select id="payment-methods" required disabled>
+                        <option value="">Loading payment methods...</option>
+                    </select>
+
+                    <!-- Total Amount Field -->
+                    <label for="amount">Amount (USD)</label>
+                    <input type="number" id="amount" required min="0.50" step="0.01" placeholder="1.00" />
+
+                    <label for="description">Description</label>
+                    <textarea id="description" placeholder="Enter payment description" required></textarea>
+
+                    <button type="submit" id="charge-button">CHARGE CARD</button>
+                    <!-- <button type="button" id="cash-collected">CASH COLLECTED</button> -->
+                    <button onclick="paymentCollected('Cash')">CASH COLLECTED</button>
+                    <button onclick="paymentCollected('Check')">CHECK COLLECTED</button>
+                </form>
+
+                <div id="success-message" class="message success"></div>
+                <div id="error-message" class="message error"></div>
+            </div>
+
+
+            <script type="module">
+                import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+                import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+                import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+                import { locationValues } from '../locations.js';
+                import { firebaseConfig } from '../firebase.js';
+                import { loadHeader } from '../header.js';
+                loadHeader();
+
+                let employeeEmail;
+
+                const app = initializeApp(firebaseConfig);
+                const auth = getAuth(app);
+                const db = getFirestore(app);
+
+                // Check Auth State
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        console.log(user);
+                        const locationData = Object.values(locationValues).find(entry => entry.employeeEmail === user.email);
+
+
+                        if (locationData) {
+                            employeeEmail = locationData.employeeEmail;
+                            fetchEvents(employeeEmail); // Your fetchEvents function
+                        } else {
+                            auth.signOut(); // Sign out unauthorized user
+                            window.location.href = "/login.html"; // Redirect to login
+                        }
+                    } else {
+                        // No user signed in, redirect to login
+                        window.location.href = "/login.html";
+                    }
+                });
+
+
+
+                let currentDate = new Date();
+                let events = [];
+
+                // window.fetchEvents = async function(email) {
+                async function fetchEvents(email) {
+                    console.log("in Fetch", email);
+
+                    try {
+                        const response = await fetch(`https://us-central1-dotg-d6313.cloudfunctions.net/universal-display-details?email=${email}&singleEvents=true`);
+                        const data = await response.json();
+
+                        events = data.map(event => ({
+                            id: event.id,
+                            title: event.summary,
+                            start: new Date(event.start.dateTime || event.start.date), // Handle all-day events
+                            end: new Date(event.end.dateTime || event.end.date),
+                            description: event.description,
+                            location: event.location,
+                            recurringEventId: event.recurringEventId || null, // Add recurring ID
+                            recurrence: event.recurrence || null,            // Add recurrence rules
+                            originalStartTime: event.originalStartTime || null // Add original start time for recurring instances
+                        }));
+                        console.log(events)
+
+                        renderCalendar();
+                    } catch (error) {
+                        console.error('Error fetching events:', error);
+                    }
+                }
+
+
+                // window.getEventsForDate = function(date) {
+                function getEventsForDate(date) {
+
+                    return events.filter(event => {
+                        const eventDate = event.start;
+                        return eventDate.getDate() === date.getDate() &&
+                            eventDate.getMonth() === date.getMonth() &&
+                            eventDate.getFullYear() === date.getFullYear();
+                    });
+                }
+                // window.formatTime = function(date) {
+
+                function formatTime(date) {
+                    return date.toLocaleTimeString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true
+                    });
+                }
+
+
+                // window.renderCalendar = function() {
+                function renderCalendar() {
+                    const grid = document.getElementById('calendarGrid');
+                    const monthDisplay = document.getElementById('currentMonth');
+
+                    // Clear previous calendar content
+                    while (grid.children.length > 7) {
+                        grid.removeChild(grid.lastChild);
+                    }
+
+                    monthDisplay.textContent = currentDate.toLocaleDateString('en-US', {
+                        month: 'long',
+                        year: 'numeric'
+                    });
+
+                    const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+                    const startingDay = firstDay.getDay();
+                    const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+                    const totalDays = lastDay.getDate();
+                    const prevMonthLastDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 0);
+                    const prevMonthDays = prevMonthLastDay.getDate();
+                    let date = 1;
+                    let nextMonthDate = 1;
+
+                    // Previous month's days
+                    for (let i = startingDay - 1; i >= 0; i--) {
+                        const cell = document.createElement('div');
+                        cell.classList.add('other-month');
+                        cell.innerHTML = `<div class="date-number">${prevMonthDays - i}</div>`;
+                        grid.appendChild(cell);
+                    }
+
+                    // Current month's days
+                    for (let i = 1; i <= totalDays; i++) {
+                        const cell = document.createElement('div');
+                        const cellDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), i);
+                        const dayEvents = getEventsForDate(cellDate);
+
+                        let eventsHtml = '';
+                        dayEvents.forEach(event => {
+                            const cleanTitle = event.title.replace("'s Detail on the Go", ""); // Remove unwanted text
+
+                            // Check if the event is recurring and apply a pink highlight class
+                            const recurringClass = event.recurringEventId ? 'recurring-event' : '';
+
+                            eventsHtml += `
+                <div class="event ${recurringClass}" onclick="showEvent('${event.id}')">${formatTime(event.start)} - ${cleanTitle}</div>
+            `;
+                        });
+
+                        cell.innerHTML = `
+            <div class="date-number">${i}</div>
+            ${eventsHtml}
+        `;
+                        grid.appendChild(cell);
+                    }
+
+                    // Next month's days
+                    const remainingCells = 42 - (startingDay + totalDays);
+                    for (let i = 0; i < remainingCells; i++) {
+                        const cell = document.createElement('div');
+                        cell.classList.add('other-month');
+                        cell.innerHTML = `<div class="date-number">${nextMonthDate}</div>`;
+                        grid.appendChild(cell);
+                        nextMonthDate++;
+                    }
+                }
+
+                window.showEvent = function (eventId) {
+                    const event = events.find(e => e.id === eventId);
+                    if (!event) {
+                        console.error('Event not found:', eventId);
+                        return;
+                    }
+
+                    // Populate the event details
+                    document.getElementById('eventTitleInput').value = event.title;
+                    document.getElementById('eventStartTime').value = event.start.toTimeString().substr(0, 5);
+                    document.getElementById('eventEndTime').value = event.end.toTimeString().substr(0, 5);
+                    document.getElementById('eventLocationInput').value = event.location || '';
+                    document.getElementById('eventDescriptionInput').value = event.description || '';
+
+                    // Extract Stripe ID and total amount from the event description
+                    const stripeMatch = event.description?.match(/Stripe:\s*cus_[a-zA-Z0-9]+/);
+                    const totalMatch = event.description?.match(/Total\s*\$([\d.]+)/);
+
+                    // Extract the actual Stripe ID from the match if found
+                    const stripeCustomerId = stripeMatch && stripeMatch[0]
+                        ? (stripeMatch[0].split('Stripe: ')[1]?.trim() || '')
+                        : '';
+
+
+                    // Log extracted information for debugging
+                    console.log("Stripe ID:", stripeCustomerId);
+                    console.log("Total Match:", totalMatch);
+
+                    // Populate the payment form fields
+                    document.getElementById('customerId').value = stripeCustomerId || '';
+                    document.getElementById('amount').value = totalMatch?.[1] || '';
+                    const fullDescription = `Location: ${event.location || 'N/A'}\n\n${event.description || ''}`;
+                    document.getElementById('description').value = fullDescription;
+
+                    // Store the eventId in a data attribute on the eventTitleInput element
+                    document.getElementById('eventTitleInput').dataset.eventId = eventId;
+
+                    // Reset payment section visibility
+                    document.getElementById('paymentSection').style.display = 'none';
+
+                    // Show the modal
+                    document.getElementById('eventModal').style.display = 'flex';
+                };
+
+
+                // Event listener for the charge form submission
+                document.getElementById('charge-form').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const successMessage = document.getElementById('success-message');
+                    const errorMessage = document.getElementById('error-message');
+                    const button = document.getElementById('charge-button');
+
+                    const customerId = document.getElementById('customerId').value;
+                    const paymentMethodId = document.getElementById('payment-methods').value;
+                    const amount = document.getElementById('amount').value;
+                    const description = document.getElementById('description').value;
+
+                    if (!confirm(`Are you sure you want to charge $${amount} to customer ${customerId}?`)) {
+                        return;
+                    }
+
+                    if (!customerId || !paymentMethodId || !amount || !description) {
+                        showMessage(errorMessage, 'Please fill in all fields');
+                        return;
+                    }
+
+                    button.disabled = true;
+                    button.textContent = 'Processing...';
+
+                    try {
+                        const response = await fetch('https://us-central1-detail-on-the-go-universal.cloudfunctions.net/charge-customer', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                customerId,
+                                paymentMethodId,
+                                amount: Math.round(parseFloat(amount) * 100), // Convert to cents
+                                description,
+                                metadata: {
+                                    location: 'stl',
+                                }
+
+                            })
+                        });
+
+                        const data = await response.json();
+
+                        if (data.success) {
+                            // Show success message
+                            showMessage(successMessage, 'Payment successful! Invoice has been sent to the billing email.');
+
+                            // Call paymentCollected function with 'card' method
+                            const eventId = document.getElementById('eventTitleInput').dataset.eventId;
+                            const event = events.find(e => e.id === eventId);
+                            if (!event) {
+                                console.error('Event not found:', eventId);
+                                alert('Could not find event for updating payment information.');
+                                return;
+                            }
+
+                            // Call the paymentCollected function with the method 'card'
+                            paymentCollected(eventId, 'card', amount);
+
+                            // Close modal and reset form
+                            e.target.reset();
+                            document.getElementById('payment-methods').innerHTML = '<option value="">Select payment method</option>';
+                            document.getElementById('payment-methods').disabled = true;
+                            document.getElementById('paymentSection').style.display = 'none';
+                            closeModal(); // Close the modal if applicable
+
+                        } else {
+                            showMessage(errorMessage, data.error || 'Payment failed');
+                        }
+                    } catch (error) {
+                        showMessage(errorMessage, 'Error processing payment');
+                    } finally {
+                        button.disabled = false;
+                        button.textContent = 'CHARGE CUSTOMER';
+                    }
+                });
+
+                // Event listener for the "Search Payment Methods" button
+                document.getElementById('search-payment-methods').addEventListener('click', async () => {
+                    const customerId = document.getElementById('customerId').value;
+                    const paymentMethodsDropdown = document.getElementById('payment-methods');
+
+                    // Reset dropdown
+                    paymentMethodsDropdown.innerHTML = '<option value="">Select payment method</option>';
+                    paymentMethodsDropdown.disabled = true;
+
+                    if (!customerId) {
+                        alert('Please enter a valid Stripe Customer ID.');
+                        return;
+                    }
+
+                    try {
+                        fetchPaymentMethods(customerId)
+                    } catch (error) {
+                        console.error('Error fetching payment methods:', error);
+                        alert('Failed to load payment methods. Please try again.');
+                    }
+                });
+
+
+
+
+
+                window.showChargeForm = function () {
+                    const customerId = document.getElementById('customerId').value;
+                    document.getElementById('paymentSection').style.display = 'block';
+                    // Only fetch payment methods if there's a customer ID
+                    if (customerId) {
+                        fetchPaymentMethods(customerId);
+                    }
+                };
+                const fetchPaymentMethods = async (customerId) => {
+                    try {
+                        const response = await fetch(`https://us-central1-detail-on-the-go-universal.cloudfunctions.net/charge-customer?customerId=${customerId}`);
+                        const data = await response.json();
+
+                        const paymentMethodsSelect = document.getElementById('payment-methods');
+                        paymentMethodsSelect.innerHTML = '<option value="">Select payment method</option>';
+
+                        if (data.paymentMethods && data.paymentMethods.length > 0) {
+                            data.paymentMethods.forEach(pm => {
+                                const option = document.createElement('option');
+                                option.value = pm.id;
+                                option.textContent = `${pm.card.brand.toUpperCase()} **** ${pm.card.last4} (exp: ${pm.card.exp_month}/${pm.card.exp_year})`;
+                                paymentMethodsSelect.appendChild(option);
+                            });
+                            paymentMethodsSelect.disabled = false;
+                        } else {
+                            paymentMethodsSelect.innerHTML = '<option value="">No payment methods found</option>';
+                        }
+                    } catch (error) {
+                        showMessage(document.getElementById('error-message'), 'Error fetching payment methods');
+                    }
+                };
+
+
+                function showMessage(element, message) {
+                    element.style.display = 'block';
+                    element.textContent = message;
+                    setTimeout(() => {
+                        element.style.display = 'none';
+                    }, 5000);
+                }
+                // Add close modal function
+                window.closeModal = function () {
+                    const modal = document.getElementById('eventModal');
+                    modal.style.display = 'none';
+                };
+
+                // Close modal when clicking outside
+                window.onclick = function (event) {
+                    const modal = document.getElementById('eventModal');
+                    if (event.target === modal) {
+                        closeModal();
+                    }
+                };
+
+                // Function to hide the event view
+                window.showCalendar = function () {
+                    const eventView = document.getElementById('eventView');
+                    if (eventView.classList.contains('active')) {
+                        eventView.classList.remove('active');
+                    }
+                };
+
+
+
+                // window.previousMonth = function() {
+                function previousMonth() {
+                    currentDate.setMonth(currentDate.getMonth() - 1);
+                    renderCalendar();
+                }
+
+                // window.nextMonth = function() {
+                function nextMonth() {
+                    currentDate.setMonth(currentDate.getMonth() + 1);
+                    renderCalendar();
+                }
+
+
+
+
+
+
+                // Make saveEvent global and maintain access to employeeEmail
+                window.saveEvent = async function () {
+                    const eventId = document.getElementById('eventTitleInput').dataset.eventId;
+                    const title = document.getElementById('eventTitleInput').value.trim();
+                    const startTime = document.getElementById('eventStartTime').value.trim();
+                    const endTime = document.getElementById('eventEndTime').value.trim();
+                    const location = document.getElementById('eventLocationInput').value.trim();
+                    const description = document.getElementById('eventDescriptionInput').value.trim();
+
+                    if (!eventId || !startTime || !endTime) {
+                        console.error('Missing required fields: eventId, start time, or end time');
+                        alert('Please fill out all required fields: start time and end time.');
+                        return;
+                    }
+
+                    const event = events.find(e => e.id === eventId);
+                    if (!event) {
+                        console.error('Original event not found');
+                        alert('Could not find original event details.');
+                        return;
+                    }
+
+                    const startDateTime = new Date(event.start);
+                    const endDateTime = new Date(event.end);
+
+                    const [startHours, startMinutes] = startTime.split(':');
+                    const [endHours, endMinutes] = endTime.split(':');
+
+                    startDateTime.setHours(parseInt(startHours), parseInt(startMinutes));
+                    endDateTime.setHours(parseInt(endHours), parseInt(endMinutes));
+
+                    const payload = {
+                        eventId: eventId,
+                        summary: title,
+                        start: startDateTime.toISOString(),
+                        end: endDateTime.toISOString(),
+                        location: location,
+                        description: description
+                    };
+
+                    try {
+                        const response = await fetch(`https://us-central1-dotg-d6313.cloudfunctions.net/universal-modify-event?email=${employeeEmail}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(payload)
+                        });
+
+                        const responseText = await response.text();
+
+                        if (!response.ok) {
+                            console.error('Server error:', responseText);
+                            alert(`Failed to save event: ${responseText}`);
+                            return;
+                        }
+
+                        if (responseText) {
+                            try {
+                                const responseData = JSON.parse(responseText);
+                                console.log('Event saved successfully:', responseData);
+                            } catch (e) {
+                                console.log('Response was not JSON:', responseText);
+                            }
+                        }
+
+                        alert('Event saved successfully!');
+
+                        await fetchEvents(employeeEmail);
+                        closeModal();
+                    } catch (error) {
+                        console.error('Error saving event:', error);
+                        alert(`An error occurred while saving the event: ${error.message}`);
+                    }
+                };
+
+
+                window.addEventListener('resize', () => {
+                    const slider = document.getElementById('sliderContainer');
+                    const isMobile = window.innerWidth <= 768;
+
+                    slider.style.transform = 'translateY(0)';
+                    if (!isMobile) {
+                        slider.style.transform = 'translateX(0)';
+                    }
+                });
+
+
+                // document.getElementById('cash-collected').addEventListener('click', async function() {
+                window.paymentCollected = async function (paymentType) {
+                    const eventId = document.getElementById('eventTitleInput').dataset.eventId;
+                    const title = document.getElementById('eventTitleInput').value.trim();
+                    const startTime = document.getElementById('eventStartTime').value.trim();
+                    const endTime = document.getElementById('eventEndTime').value.trim();
+                    const location = document.getElementById('eventLocationInput').value.trim();
+                    const description = document.getElementById('eventDescriptionInput').value.trim();
+
+                    const amount = document.getElementById('amount').value.trim(); // Amount from the input field
+                    if (!amount || isNaN(amount) || amount <= 0) {
+                        console.error('Invalid amount entered');
+                        alert('Please enter a valid amount.');
+                        return;
+                    }
+
+                    const paymentDate = new Date().toLocaleString(); // Get the current date and time
+                    if (!eventId) {
+                        console.error(`Missing event ID for ${paymentType} collection`);
+                        alert(`Could not process ${paymentType} collection: event ID is missing.`);
+                        return;
+                    }
+
+                    // Find the event based on the event ID
+                    const event = events.find(e => e.id === eventId);
+                    if (!event) {
+                        console.error('Original event not found');
+                        alert('Could not find original event details.');
+                        return;
+                    }
+
+                    // Prepare the payment message with amount, type, and date/time
+                    const paymentMessage = `${amount} collected in ${paymentType} on ${paymentDate}`;
+
+                    // Prepare the payload to mark payment as collected
+                    const payload = {
+                        eventId: eventId,
+                        summary: event.summary, // Keep the title unchanged
+                        start: new Date(event.start).toISOString(), // Keep start unchanged
+                        end: new Date(event.end).toISOString(), // Keep end unchanged
+                        location: event.location, // Keep location unchanged
+                        description: `${event.description || ''}\n\n${paymentMessage}` // Add payment info to the description
+                    };
+
+                    try {
+                        // Send the payload using the same API endpoint
+                        const response = await fetch(`https://us-central1-dotg-d6313.cloudfunctions.net/universal-modify-event?email=${employeeEmail}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(payload)
+                        });
+
+                        const responseText = await response.text();
+
+                        if (!response.ok) {
+                            console.error('Server error:', responseText);
+                            alert(`Failed to update event for ${paymentType} collection: ${responseText}`);
+                            return;
+                        }
+
+                        console.log(`Event updated successfully for ${paymentType} collection:`, responseText);
+                        alert(`Event marked as ${paymentType} collected successfully!`);
+
+                        await fetchEvents(employeeEmail); // Refresh events
+                        closeModal(); // Close the modal if applicable
+                    } catch (error) {
+                        console.error(`Error updating event for ${paymentType} collection:`, error);
+                        alert(`An error occurred while marking ${paymentType} collected: ${error.message}`);
+                    }
+                };
+
+
+            </script>
+</body>
+
+</html>
