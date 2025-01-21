@@ -31,7 +31,6 @@ const MessengerPage = () => {
   const conversationViewRef = useRef(null);
   const [delay, setDelay] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [locationDetails, setLocationDetails] = useState(null);
 
   // Initialize Firebase Auth
   const auth = getAuth();
@@ -50,27 +49,21 @@ const MessengerPage = () => {
     return unsubscribe; // Cleanup on unmount
   }, []);
 
-
   useEffect(() => {
-    const storedLocationDetails = sessionStorage.getItem('locationDetails');
-    if (storedLocationDetails) {
-      const parsedDetails = JSON.parse(storedLocationDetails);
-      setLocationDetails(parsedDetails);
-      console.log('Location details loaded:', parsedDetails);
+    const locationDetails = sessionStorage.getItem('locationDetails');
+    if (locationDetails) {
+      console.log('Retrieved location details from sessionStorage:', JSON.parse(locationDetails));
     } else {
       console.log('No location details found in sessionStorage');
     }
-  }, []);
-
-
-
+  }, []); // This runs once when the component mounts
+  
+  
 
   // Existing fetchContacts and fetchMessages logic
   useEffect(() => {
     const fetchContacts = async () => {
-      if (!locationDetails) return;
-
-      const smsCollection = locationDetails.collectionId; // Dynamic collection
+      const smsCollection = "sms-lwr";
       const contactsRef = collection(db, smsCollection);
 
       try {
@@ -114,8 +107,8 @@ const MessengerPage = () => {
     };
 
     fetchContacts();
-  }, [locationDetails]);
 
+  }, []);
 
   const fetchMessages = (contactId) => {
     const contactDocRef = doc(db, "sms-lwr", contactId);
@@ -236,14 +229,15 @@ const MessengerPage = () => {
   };
 
   const handleSendMessage = async (delay = 0) => {
-    if (!message.trim() || loading || !locationDetails) return;
+    if (!message.trim() || loading) return;
 
     setLoading(true); // Disable the send button
     const phoneNumber = selectedContact?.id;
-    const businessNumber = locationDetails.businessNumber; // Use dynamic business number
-    const formattedMessage = `${message.trim()} - ${locationDetails.employeeName}, Detail On The Go`;
+    const businessNumber = "+17856156156"; // Replace with your actual business number
+    const formattedMessage = `${message.trim()} - Levi, Detail On The Go`;
 
     try {
+      // Call the Google Cloud Function
       const response = await fetch(
         `https://us-central1-detail-on-the-go-universal.cloudfunctions.net/sms?to=${encodeURIComponent(
           phoneNumber
@@ -271,11 +265,13 @@ const MessengerPage = () => {
   };
 
 
+
+
   const initiateCall = () => {
-    if (selectedContact && locationDetails) {
+    if (selectedContact) {
       const clientNumber = selectedContact.phone;
-      const businessNumber = locationDetails.businessNumber;
-      const employeeNumber = locationDetails.employeeNumber;
+      const businessNumber = '+17856156156';
+      const employeeNumber = '+19137771848';
 
       fetch(`https://us-central1-dotg-d6313.cloudfunctions.net/LWR-create-call?businessnumber=${businessNumber}&forwardnumber=${employeeNumber}&clientnumber=${clientNumber}`, {
         method: 'POST',
@@ -296,7 +292,6 @@ const MessengerPage = () => {
       alert('Please select a contact to initiate a call.');
     }
   };
-
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -341,12 +336,6 @@ const MessengerPage = () => {
         ${isSidebarOpen ? 'h-screen' : 'h-0 lg:h-screen'}
       `}>
         <div className="p-4 mt-16 lg:mt-0">
-          {locationDetails && (
-            <div className="mb-4 text-gray-700">
-              <h2 className="font-bold text-lg">{locationDetails.employeeName}</h2>
-              <p className="text-sm">{locationDetails.location}</p>
-            </div>
-          )}
           <input
             placeholder="Search contacts..."
             value={searchQuery}
