@@ -118,11 +118,11 @@ const Header = () => {
                 <li><NavButton href="/payments" className="w-full justify-center" onClick={closeMenu}>Payments</NavButton></li>
                 <li><NavButton href="/email" className="w-full justify-center" onClick={closeMenu}>Email</NavButton></li>
                 <li><NavButton href="/booking" className="w-full justify-center" onClick={closeMenu}>Book</NavButton></li>
+                <li><NavButton href="/popup" className="w-full justify-center" onClick={closeMenu}>popup</NavButton></li>
               </ul>
             </nav>
             {locationDetails && (
               <div className="absolute top-4 right-4 text-sm text-gray-500">
-                Name: {locationDetails.employeeName || 'N/A'}
               </div>
             )}
           </>

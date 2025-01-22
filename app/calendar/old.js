@@ -1,24 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getUser, onAuthStateChangedListener } from '../../auth';
+import { onAuthStateChangedListener } from '../../auth';
+import React, { lazy, Suspense } from 'react';
+
+const PaymentPopup = lazy(() => import('./PaymentPopup'));
 
 const CalendarPage = () => {
   const [events, setEvents] = useState([]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [isPopupVisible, setIsPopupVisible] = useState(false);
-  const [paymentMethods, setPaymentMethods] = useState([]);
-  const [isFetchingPaymentMethods, setIsFetchingPaymentMethods] = useState(false);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('');
-  const [user, setUser] = useState(null);
-  const [amount, setAmount] = useState('');
-  const [selectedCard, setSelectedCard] = useState('');
-  const [chargeDescription, setChargeDescription] = useState('');
-
-
-
-
+  const [stripeCustomerId, setStripeCustomerId] = useState('');
+  const [isPaymentPopupVisible, setIsPaymentPopupVisible] = useState(false);
 
   // Fetch events once the user is authenticated
   useEffect(() => {
@@ -30,7 +24,7 @@ const CalendarPage = () => {
           `https://us-central1-dotg-d6313.cloudfunctions.net/universal-display-details?email=${user.email}&singleEvents=true`
         );
         const data = await response.json();
-        const fetchedEvents = data.map(event => ({
+        const fetchedEvents = data.map((event) => ({
           id: event.id,
           title: event.summary,
           start: new Date(event.start.dateTime || event.start.date),
@@ -47,166 +41,11 @@ const CalendarPage = () => {
 
     const unsubscribe = onAuthStateChangedListener((user) => {
       console.log('Auth changed, user:', user);
-      setUser(user); // Store the user in state
       fetchEvents(user);
     });
 
-
     return () => unsubscribe();
   }, []);
-
-  // When an event is selected, extract the Stripe customer ID (if available)
-  // and fetch payment methods for that customer.
-  useEffect(() => {
-    if (selectedEvent && selectedEvent.description) {
-      console.log('Selected event description:', selectedEvent.description);
-      const strippedDescription = selectedEvent.description.replace(/<[^>]+>/g, ' ');
-      console.log('Stripped event description:', strippedDescription);
-      const stripeMatch = strippedDescription.match(/Stripe:\s*(cus_[a-zA-Z0-9]+)/);
-      if (stripeMatch && stripeMatch[1]) {
-        const stripeCustomerId = stripeMatch[1].trim();
-        console.log('Extracted Stripe Customer ID:', stripeCustomerId);
-        fetchPaymentMethods(stripeCustomerId);
-      } else {
-        console.log('No Stripe Customer ID found in the event description.');
-        setPaymentMethods([]);
-      }
-    }
-  }, [selectedEvent]);
-  const chargeCustomer = async (customerId, paymentMethodId, amount, description) => {
-    try {
-      console.log("Initiating charge:", {
-        customerId,
-        paymentMethodId,
-        amount,
-        description,
-      });
-
-      const response = await fetch(
-        'https://us-central1-detail-on-the-go-universal.cloudfunctions.net/charge-customer',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            customerId,
-            paymentMethodId,
-            amount: Math.round(parseFloat(amount) * 100), // Convert to cents
-            description,
-            metadata: {
-              location: 'stl',
-            },
-          }),
-        }
-      );
-
-      console.log("Response status:", response.status);
-      if (!response.ok) {
-        const errorData = await response.text();
-        console.error("Error response from server:", errorData);
-        throw new Error("Failed to charge customer");
-      }
-
-      const data = await response.json();
-      console.log("Charge successful:", data);
-      return data;
-    } catch (error) {
-      console.error("Error in chargeCustomer:", error);
-      throw error;
-    }
-  };
-
-
-  const generatePrefilledDescription = (event) => {
-    // Extract vehicle type
-    const vehicleMatch = event.description.match(/Vehicle:\s*\(([^)]+)\)/);
-    const vehicle = vehicleMatch ? vehicleMatch[1] : "Unknown Vehicle";
-  
-    // Extract package and plan
-    const packageName = event.description.match(/Package:\s*(.+?)(<br>|$)/)?.[1]?.trim() || "Unknown Package";
-    const plan = event.description.match(/Plan:\s*(.+?)(<br>|$)/)?.[1]?.trim() || "Unknown Plan";
-  
-    // Extract financial details
-    const beforeTaxMatch = event.description.match(/Services:\s*\$(\d+(\.\d{2})?)/);
-    const taxMatch = event.description.match(/Sales Tax:\s*\$(\d+(\.\d{2})?)/);
-    const totalMatch = event.description.match(/Total\s*\$(\d+(\.\d{2})?)/);
-  
-    // Extract only the first match for each financial field
-    const beforeTax = beforeTaxMatch ? parseFloat(beforeTaxMatch[1]) : 0;
-    const tax = taxMatch ? parseFloat(taxMatch[1]) : 0;
-    const total = totalMatch ? parseFloat(totalMatch[1]) : beforeTax + tax;
-  
-    // Extract billing location from event.location
-    const location = event.location || "Unknown Location";
-  
-    // Generate description
-    return `
-  Vehicle: ${vehicle}
-  Package: ${packageName}
-  Plan: ${plan}
-  Before Tax: $${beforeTax.toFixed(2)}
-  Tax: $${tax.toFixed(2)}
-  Total: $${total.toFixed(2)}
-  Billing Location: ${location}`;
-  };
-  
-
-
-
-  const updateEvent = async (userEmail, eventId, summary, start, end, location, description) => {
-    try {
-      const response = await fetch(
-        `https://us-central1-dotg-d6313.cloudfunctions.net/universal-modify-event?email=${userEmail}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            eventId,
-            summary,
-            start,
-            end,
-            location,
-            description,
-          }),
-        }
-      );
-      if (!response.ok) {
-        throw new Error('Failed to update event');
-      }
-      return await response.json();
-    } catch (error) {
-      console.error('Error updating event:', error);
-      throw error;
-    }
-  };
-
-
-
-  // Function to fetch payment methods from the Cloud Function for the given customer ID
-  const fetchPaymentMethods = async (customerId) => {
-    console.log("Fetching payment methods for customerId:", customerId);
-    setIsFetchingPaymentMethods(true);
-    try {
-      const response = await fetch(
-        `https://us-central1-detail-on-the-go-universal.cloudfunctions.net/charge-customer?customerId=${customerId}`
-      );
-      const data = await response.json();
-      console.log("Payment methods fetch response:", data);
-      if (data.paymentMethods && data.paymentMethods.length > 0) {
-        setPaymentMethods(data.paymentMethods);
-      } else {
-        setPaymentMethods([]);
-        console.log("No payment methods found for customer:", customerId);
-      }
-    } catch (error) {
-      console.error("Error fetching payment methods:", error);
-      setPaymentMethods([]);
-    } finally {
-      setIsFetchingPaymentMethods(false);
-    }
-  };
-
 
   const nextMonth = () =>
     setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + 1)));
@@ -246,14 +85,12 @@ const CalendarPage = () => {
     console.log('Event clicked:', event);
     setSelectedEvent(event);
     setIsPopupVisible(true);
-    setSelectedPaymentMethod('');
   };
 
   const closePopup = () => {
     console.log('Closing popup');
     setIsPopupVisible(false);
     setSelectedEvent(null);
-    setPaymentMethods([]);
   };
 
   return (
@@ -340,168 +177,34 @@ const CalendarPage = () => {
               <div className="text-gray-800 mt-2">
                 <strong>Description:</strong>
                 <div
-                  className="whitespace-pre-wrap"
-                  dangerouslySetInnerHTML={{ __html: selectedEvent.description }}
+                  className="whitespace-pre-wrap mt-2"
+                  dangerouslySetInnerHTML={{
+                    __html: selectedEvent.description
+                      .replace(/<br>/g, '\n') // Convert <br> to newlines
+                      .replace(/<a href="(.+?)" target="_blank">(.+?)<\/a>/g, '$2 ($1)') // Simplify anchor tags
+                      .replace(/&amp;/g, '&') // Decode ampersands
+                      .replace(/<u>(.+?)<\/u>/g, '<strong>$1</strong>'), // Convert underline to bold
+                  }}
                 ></div>
-                {(() => {
-                  const strippedDescription = selectedEvent.description.replace(/<[^>]+>/g, " ");
-                  const stripeMatch = strippedDescription.match(/Stripe:\s*(cus_[a-zA-Z0-9]+)/);
-
-                  if (stripeMatch && stripeMatch[1]) {
-                    const stripeCustomerId = stripeMatch[1].trim();
-                    return (
-                      <div className="mt-4">
-                        <p className="text-gray-800">
-                          <strong>Stripe Customer ID:</strong> {stripeCustomerId}
-                        </p>
-                        {isFetchingPaymentMethods ? (
-                          <p className="text-gray-600">Loading payment methods...</p>
-                        ) : (
-                          paymentMethods.length > 0 && (
-                            <>
-                              {/* Amount Input */}
-                              <div className="mt-4">
-                                <label htmlFor="amount" className="block text-gray-800">
-                                  Amount to Collect/Charge:
-                                </label>
-                                <input
-                                  type="number"
-                                  id="amount"
-                                  className="mt-2 p-2 border rounded w-full"
-                                  placeholder="Enter amount in dollars"
-                                  value={amount}
-                                  onChange={(e) => setAmount(e.target.value)}
-                                />
-                              </div>
-
-                              {/* Payment Method Dropdown */}
-                              <div className="mt-4">
-                                <label htmlFor="payment-method" className="block text-gray-800">
-                                  Select Payment Method:
-                                </label>
-                                <select
-                                  id="payment-method"
-                                  className="mt-2 p-2 border rounded w-full"
-                                  value={selectedPaymentMethod}
-                                  onChange={(e) => {
-                                    const selectedMethod = e.target.value;
-                                    setSelectedPaymentMethod(selectedMethod);
-
-                                    // Prefill description when "Card" is selected
-                                    if (selectedMethod === "card" && selectedEvent) {
-                                      const prefilledDescription = generatePrefilledDescription(selectedEvent, user);
-                                      setChargeDescription(prefilledDescription);
-                                    } else {
-                                      setChargeDescription(''); // Reset description for non-card payments
-                                    }
-                                  }}
-                                >
-                                  <option value="">Select Method</option>
-                                  <option value="card">Card</option>
-                                  <option value="cash">Cash</option>
-                                  <option value="check">Check</option>
-                                </select>
-
-
-                              </div>
-
-                              {/* Card Options Dropdown */}
-                              {selectedPaymentMethod === "card" && paymentMethods.length > 0 && (
-                                <div className="mt-4">
-                                  <label htmlFor="card-selection" className="block text-gray-800">
-                                    Select Card:
-                                  </label>
-                                  <select
-                                    id="card-selection"
-                                    className="mt-2 p-2 border rounded w-full"
-                                    value={selectedCard}
-                                    onChange={(e) => setSelectedCard(e.target.value)}
-                                  >
-                                    <option value="">Select a Card</option>
-                                    {paymentMethods.map((pm) => (
-                                      <option key={pm.id} value={pm.id}>
-                                        {`${pm.card.brand.toUpperCase()} **** ${pm.card.last4} (exp: ${pm.card.exp_month}/${pm.card.exp_year})`}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                              )}
-
-                              {/* Description Input (for Card Payments Only) */}
-                              {selectedPaymentMethod === "card" && (
-                                <div className="mt-4">
-                                  <label htmlFor="charge-description" className="block text-gray-800">
-                                    Charge Description:
-                                  </label>
-                                  <textarea
-                                    id="charge-description"
-                                    className="mt-2 p-2 border rounded w-full"
-                                    placeholder="Enter a description for this charge"
-                                    value={chargeDescription}
-                                    onChange={(e) => setChargeDescription(e.target.value)}
-                                  ></textarea>
-                                </div>
-                              )}
-
-
-
-
-                              {/* Confirm Payment Button */}
-                              <div className="mt-4">
-                                <button
-                                  className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 disabled:bg-gray-300"
-                                  onClick={async () => {
-                                    if (!amount || isNaN(amount) || amount <= 0) {
-                                      alert("Please enter a valid amount.");
-                                      return;
-                                    }
-                                    if (!selectedPaymentMethod) {
-                                      alert("Please select a payment method.");
-                                      return;
-                                    }
-                                    if (selectedPaymentMethod === "card" && !selectedCard) {
-                                      alert("Please select a card.");
-                                      return;
-                                    }
-                                    if (selectedPaymentMethod === "card" && !chargeDescription.trim()) {
-                                      alert("Please enter a description for the charge.");
-                                      return;
-                                    }
-
-                                    try {
-                                      console.log("Charging customer...");
-                                      await chargeCustomer(
-                                        stripeCustomerId, // Customer ID
-                                        selectedCard, // Card ID
-                                        amount, // Amount in dollars
-                                        chargeDescription // Description
-                                      );
-
-                                      alert("Payment successful!");
-                                    } catch (error) {
-                                      console.error("Payment failed:", error);
-                                      alert("Payment failed. Please try again.");
-                                    }
-                                  }}
-
-
-
-
-                                >
-                                  Confirm Payment
-                                </button>
-                              </div>
-                            </>
-                          )
-                        )}
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
-
               </div>
             )}
+
+            <button
+              onClick={() => {
+                const strippedDescription = selectedEvent.description.replace(/<[^>]+>/g, ' ');
+                const stripeMatch = strippedDescription.match(/Stripe:\s*(cus_[a-zA-Z0-9]+)/);
+                if (stripeMatch && stripeMatch[1]) {
+                  const customerId = stripeMatch[1].trim();
+                  setStripeCustomerId(customerId);
+                  setIsPaymentPopupVisible(true); // Open payment popup
+                } else {
+                  alert('No Stripe Customer ID found.');
+                }
+              }}
+              className="mt-4 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+            >
+              View Payment & Charge
+            </button>
             <button
               onClick={closePopup}
               className="mt-4 bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600"
@@ -511,6 +214,17 @@ const CalendarPage = () => {
           </div>
         </div>
       )}
+
+      {isPaymentPopupVisible && (
+        <Suspense fallback={<div>Loading payment popup...</div>}>
+          <PaymentPopup
+            onClose={() => setIsPaymentPopupVisible(false)}
+            stripeCustomerId={stripeCustomerId}
+            selectedEvent={selectedEvent} // Pass the selected event
+          />
+        </Suspense>
+      )}
+
     </div>
   );
 };
