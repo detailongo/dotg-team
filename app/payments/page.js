@@ -1,18 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { initializeApp } from 'firebase/app';
 import { getUser, onAuthStateChangedListener } from '../../auth';
-
-const firebaseConfig = {
-  apiKey: "AIzaSyBMVa4EhYrz2NyYBdaVMJTS-JjfUIQDagQ",
-  authDomain: "detail-on-the-go-universal.firebaseapp.com",
-  projectId: "detail-on-the-go-universal",
-  storageBucket: "detail-on-the-go-universal.firebasestorage.app",
-  messagingSenderId: "896343340170",
-  appId: "1:896343340170:web:473d7fd278d40649de2973",
-  measurementId: "G-W2D7QKW2YS"
-};
 
 const PaymentsPage = () => {
   const [payments, setPayments] = useState([]);
