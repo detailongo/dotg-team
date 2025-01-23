@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import AddCard from './addCard'; // Make sure the file is actually named AddCard.js
+import AddCard from './AddCard'; // Make sure the file is actually named AddCard.js
 
 const PaymentPopup = ({ onClose, stripeCustomerId, selectedEvent, onPaymentSuccess }) => {
   const [paymentMethods, setPaymentMethods] = useState([]);
