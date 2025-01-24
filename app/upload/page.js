@@ -1,5 +1,5 @@
 "use client";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { UploadDropzone } from "../../src/utils/uploadthing";
 import { Search, File, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 
@@ -7,9 +7,34 @@ export default function UploadPage() {
   const [files, setFiles] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Add filtered files calculation
   const filteredFiles = files.filter(file =>
     file.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  useEffect(() => {
+    const loadFiles = async () => {
+      try {
+        const res = await fetch('/api/files');
+        if (!res.ok) throw new Error('Failed to fetch files');
+        
+        const files = await res.json();
+        const formattedFiles = files.map(file => ({
+          name: file.name || file.key.split('/').pop(),
+          size: `${(file.size / 1024).toFixed(2)} KB`,
+          uploadedAt: new Date(file.uploadedAt).toLocaleDateString(),
+          status: file.status.toLowerCase(),
+          route: `https://${process.env.NEXT_PUBLIC_UPLOADTHING_APP_ID}.ufs.sh/f/${file.key}`
+        }));
+        
+        setFiles(formattedFiles);
+      } catch (error) {
+        console.error("Error loading files:", error);
+        // Optional: Add error state UI feedback
+      }
+    };
+    loadFiles();
+  }, []);
 
   return (
     <main className="min-h-screen bg-gray-50 p-8">
@@ -55,7 +80,7 @@ export default function UploadPage() {
           />
         </div>
 
-        {files.length > 0 ? (
+        {filteredFiles.length > 0 ? (
           <div className="mt-8 overflow-hidden rounded-lg border border-gray-200 bg-white">
             <div className="grid grid-cols-12 border-b border-gray-200 bg-gray-50 px-6 py-3 text-sm font-medium text-gray-600">
               <div className="col-span-4">Name</div>
@@ -99,7 +124,9 @@ export default function UploadPage() {
           </div>
         ) : (
           <div className="mt-8 text-center text-gray-500">
-            No files uploaded yet. Upload some files to get started!
+            {files.length === 0
+              ? "No files uploaded yet. Upload some files to get started!"
+              : "No files match your search query"}
           </div>
         )}
       </div>
