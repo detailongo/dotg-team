@@ -1,16 +1,44 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { UploadDropzone } from "../../src/utils/uploadthing";
-import { Search, File, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { Search, File, Clock, CheckCircle, AlertCircle, Trash } from 'lucide-react'; // Added Trash icon
 
 export default function UploadPage() {
   const [files, setFiles] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Add filtered files calculation
   const filteredFiles = files.filter(file =>
     file.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Add delete functionality
+  const handleDelete = async (fileKey) => {
+    const confirmed = window.confirm('Are you sure you want to delete this file?');
+    if (!confirmed) return;
+
+    // Optimistic update
+    setFiles(prev => prev.map(file => 
+      file.key === fileKey ? { ...file, status: 'deleting' } : file
+    ));
+
+    try {
+      const response = await fetch('/api/files', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ fileKey }),
+      });
+
+      if (!response.ok) throw new Error('Delete failed');
+      setFiles(prev => prev.filter(file => file.key !== fileKey));
+    } catch (error) {
+      console.error('Delete error:', error);
+      setFiles(prev => prev.map(file => 
+        file.key === fileKey ? { ...file, status: 'error' } : file
+      ));
+    }
+  };
 
   useEffect(() => {
     const loadFiles = async () => {
@@ -20,6 +48,7 @@ export default function UploadPage() {
         
         const files = await res.json();
         const formattedFiles = files.map(file => ({
+          key: file.key, // Added key for deletion
           name: file.name || file.key.split('/').pop(),
           size: `${(file.size / 1024).toFixed(2)} KB`,
           uploadedAt: new Date(file.uploadedAt).toLocaleDateString(),
@@ -30,7 +59,6 @@ export default function UploadPage() {
         setFiles(formattedFiles);
       } catch (error) {
         console.error("Error loading files:", error);
-        // Optional: Add error state UI feedback
       }
     };
     loadFiles();
@@ -58,6 +86,7 @@ export default function UploadPage() {
             endpoint="imageUploader"
             onClientUploadComplete={(res) => {
               const newFiles = res.map(file => ({
+                key: file.key, // Added key for new uploads
                 name: file.name,
                 size: `${(file.size / 1024 / 1024).toFixed(2)} MB`,
                 uploadedAt: new Date().toLocaleDateString(),
@@ -68,6 +97,7 @@ export default function UploadPage() {
             }}
             onUploadError={(error) => {
               const errorFile = {
+                key: `error-${Date.now()}`, // Unique key for errors
                 name: error.message,
                 size: 'N/A',
                 uploadedAt: new Date().toLocaleDateString(),
@@ -92,7 +122,7 @@ export default function UploadPage() {
             
             {filteredFiles.map((file, index) => (
               <div
-                key={index}
+                key={file.key} // Changed to use file.key instead of index
                 className="grid grid-cols-12 items-center px-6 py-4 text-sm text-gray-700 hover:bg-gray-50"
               >
                 <div className="col-span-4 flex items-center">
@@ -108,6 +138,16 @@ export default function UploadPage() {
                   {file.uploadedAt}
                 </div>
                 <div className="col-span-2 flex items-center">
+                  {/* Delete Button */}
+                  <button
+                    onClick={() => handleDelete(file.key)}
+                    disabled={file.status === 'deleting'}
+                    className="mr-2 text-red-600 hover:text-red-800 disabled:opacity-50"
+                  >
+                    <Trash className="h-4 w-4" />
+                  </button>
+
+                  {/* Status Indicators */}
                   {file.status === 'success' && (
                     <CheckCircle className="mr-2 h-4 w-4 text-green-600" />
                   )}
@@ -116,6 +156,9 @@ export default function UploadPage() {
                   )}
                   {file.status === 'uploading' && (
                     <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                  )}
+                  {file.status === 'deleting' && (
+                    <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-gray-600 border-t-transparent" />
                   )}
                   <span className="capitalize">{file.status}</span>
                 </div>
