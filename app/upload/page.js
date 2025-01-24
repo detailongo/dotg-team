@@ -43,7 +43,7 @@ export default function UploadPage() {
     console.log('Deleting file:', fileKey); // Debugging
     const confirmed = window.confirm('Are you sure you want to delete this file?');
     if (!confirmed) return;
-  
+
     try {
       const response = await fetch('/api/files', {
         method: 'DELETE',
@@ -52,15 +52,15 @@ export default function UploadPage() {
         },
         body: JSON.stringify({ fileKey }), // Send `fileKey` (singular) instead of `fileKeys`
       });
-  
+
       console.log('Delete response:', response); // Debugging
-  
+
       if (!response.ok) {
         const errorData = await response.json(); // Parse error response
         console.error('Delete failed with error:', errorData); // Debugging
         throw new Error('Delete failed');
       }
-  
+
       setFiles((prev) => prev.filter((file) => file.key !== fileKey));
       toast.success('File deleted successfully!');
     } catch (error) {
@@ -68,7 +68,7 @@ export default function UploadPage() {
       toast.error('Failed to delete file');
     }
   };
-  
+
 
   // Bulk delete
   const handleBulkDelete = async () => {
@@ -302,8 +302,20 @@ export default function UploadPage() {
         >
           {previewFile && (
             <div className="p-4">
-              <h2 className="text-xl font-bold">{previewFile.name}</h2>
-              <img src={previewFile.route} alt={previewFile.name} className="mt-4 max-h-[80vh] max-w-full" />
+              <h2 className="text-xl font-bold mb-4">{previewFile.name}</h2>
+              {previewFile.type === 'pdf' ? (
+                <iframe
+                  src={previewFile.route}
+                  title={previewFile.name}
+                  className="w-full h-[80vh]"
+                />
+              ) : (
+                <img
+                  src={previewFile.route}
+                  alt={previewFile.name}
+                  className="max-h-[80vh] max-w-full mx-auto"
+                />
+              )}
             </div>
           )}
         </Modal>
