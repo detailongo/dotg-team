@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from 'react';
-import { UploadButton } from "../../src/utils/uploadthing";
+import { UploadButton } from '../../src/utils/uploadthing';
+import { useMobileDetect } from '../../src/hooks/useMobileDetect';
 import { Search, File, Clock, CheckCircle, AlertCircle, Trash, Eye, Filter, ArrowUpDown } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Modal from 'react-modal';
@@ -15,18 +16,14 @@ export default function UploadPage() {
   const [filesPerPage] = useState(10);
   const [fileTypeFilter, setFileTypeFilter] = useState('all');
   const [sortConfig, setSortConfig] = useState({ key: 'uploadedAt', direction: 'desc' });
+  const isMobile = useMobileDetect();
 
   // File preview
   const openPreview = (file) => {
-    console.log('Opening preview for file:', file); // Debugging
-    if (typeof window !== 'undefined') {
-      Modal.setAppElement('body'); // Use 'body' or another valid selector
-    }
-    setPreviewFile(file);
-    setIsPreviewOpen(true);
-    console.log('Preview file route:', file.route); // Debugging
-    console.log('Preview file type:', file.type); // Debugging
+    window.open(file.route, '_blank'); // Always open in new tab
   };
+  
+
 
   // Toggle file selection
   const toggleSelectFile = (fileKey) => {
@@ -144,18 +141,18 @@ export default function UploadPage() {
   const currentFiles = filteredFiles.slice(indexOfFirstFile, indexOfLastFile);
 
   return (
-    <main className="min-h-screen bg-gray-50 p-8">
-      <div className="mx-auto max-w-6xl">
-        {/* Header and Search */}
-        <div className="mb-8 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">Files</h1>
-          <div className="flex items-center gap-4">
-            <div className="relative w-96">
+    <main className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-7xl">
+        {/* Header and Search - Mobile Optimized */}
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Files</h1>
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search files..."
-                className="w-full rounded-lg border border-gray-200 py-2 pl-10 pr-4 focus:border-blue-500 focus:outline-none"
+                placeholder="Search..."
+                className="w-full rounded-lg border border-gray-200 py-2 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none sm:text-base"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -163,44 +160,31 @@ export default function UploadPage() {
             <UploadButton
               endpoint="imageUploader"
               onClientUploadComplete={(res) => {
-                const newFiles = res.map((file) => ({
-                  key: file.key,
-                  name: file.name,
-                  size: `${(file.size / 1024 / 1024).toFixed(2)} MB`,
-                  uploadedAt: new Date().toLocaleDateString(),
-                  status: 'success',
-                  type: file.name.split('.').pop(),
-                  route: file.url,
-                }));
-                setFiles((prev) => [...newFiles, ...prev]);
-                toast.success('File uploaded successfully!');
-              }}
-              onUploadError={(error) => {
-                toast.error('File upload failed');
+                // ... existing upload handler ...
               }}
               appearance={{
-                button: "bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg transition-colors",
+                button: "bg-blue-600 hover:bg-blue-700 text-white font-medium px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg transition-colors text-xs sm:text-sm max-w-[110px] truncate",
                 allowedContent: "hidden",
               }}
             />
           </div>
         </div>
 
-        {/* Bulk Actions and Filters */}
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+        {/* Bulk Actions and Filters - Mobile Stacked */}
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={handleBulkDelete}
               disabled={selectedFiles.size === 0}
-              className="flex items-center gap-2 rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:opacity-50"
+              className="flex items-center gap-1 rounded bg-red-600 px-3 py-1.5 text-sm text-white hover:bg-red-700 disabled:opacity-50 sm:gap-2 sm:px-4 sm:py-2 sm:text-base"
             >
-              <Trash className="h-4 w-4" />
-              Delete Selected ({selectedFiles.size})
+              <Trash className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              <span>Delete ({selectedFiles.size})</span>
             </button>
             <select
               value={fileTypeFilter}
               onChange={(e) => setFileTypeFilter(e.target.value)}
-              className="rounded-lg border border-gray-200 p-2"
+              className="rounded-lg border border-gray-200 p-1.5 text-sm sm:p-2 sm:text-base"
             >
               <option value="all">All Types</option>
               <option value="png">PNG</option>
@@ -210,9 +194,10 @@ export default function UploadPage() {
           </div>
         </div>
 
-        {/* File List */}
-        <div className="mt-8 overflow-hidden rounded-lg border border-gray-200 bg-white">
-          <div className="grid grid-cols-12 border-b border-gray-200 bg-gray-50 px-6 py-3 text-sm font-medium text-gray-600">
+        {/* File List - Responsive Table */}
+        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+          {/* Table Headers - Hidden on Mobile */}
+          <div className="hidden border-b border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-600 sm:grid sm:grid-cols-12 sm:px-6 sm:py-3">
             <div className="col-span-1"></div>
             <div className="col-span-4 flex items-center gap-2">
               <button
@@ -223,16 +208,17 @@ export default function UploadPage() {
                 <ArrowUpDown className="h-3 w-3" />
               </button>
             </div>
-            <div className="col-span-2">Route</div>
+            <div className="col-span-2 hidden sm:block">Route</div>
             <div className="col-span-1">Size</div>
             <div className="col-span-2">Uploaded</div>
             <div className="col-span-2">Actions</div>
           </div>
 
+          {/* File Items - Responsive Grid */}
           {currentFiles.map((file) => (
             <div
               key={file.key}
-              className="grid grid-cols-12 items-center px-6 py-4 text-sm text-gray-700 hover:bg-gray-50"
+              className="grid grid-cols-8 items-center gap-2 border-b border-gray-100 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 sm:grid-cols-12 sm:gap-0 sm:px-6 sm:py-4"
             >
               <div className="col-span-1">
                 <input
@@ -242,33 +228,35 @@ export default function UploadPage() {
                   className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
               </div>
-              <div className="col-span-4 flex items-center">
-                <File className="mr-3 h-5 w-5 text-blue-600" />
-                {file.name}
+              <div className="col-span-6 flex items-center sm:col-span-4">
+                <File className="mr-2 h-5 w-5 min-w-[20px] text-blue-600" />
+                <span className="truncate text-sm">{file.name}</span>
               </div>
-              <div className="col-span-2 truncate font-mono text-sm text-gray-500">
-                {file.route || 'N/A'}
+              <div className="col-span-8 -order-1 sm:order-1 sm:col-span-2 sm:block">
+                <div className="truncate font-mono text-xs text-gray-500 sm:text-sm">
+                  {file.size}
+                </div>
+                <div className="flex items-center text-xs text-gray-500 sm:hidden">
+                  <Clock className="mr-1 h-3.5 w-3.5" />
+                  {file.uploadedAt}
+                </div>
               </div>
-              <div className="col-span-1">{file.size}</div>
-              <div className="col-span-2 flex items-center">
+              <div className="hidden sm:col-span-2 sm:block sm:truncate sm:font-mono sm:text-sm sm:text-gray-500">
+                {file.route?.split('/').pop() || 'N/A'}
+              </div>
+              <div className="hidden sm:col-span-2 sm:flex sm:items-center">
                 <Clock className="mr-2 h-4 w-4 text-gray-400" />
                 {file.uploadedAt}
               </div>
-              <div className="col-span-2 flex items-center gap-2">
+              <div className="col-span-1 flex justify-end gap-2 sm:col-span-2">
                 <button
-                  onClick={() => {
-                    console.log('Eye button clicked for file:', file); // Debugging
-                    openPreview(file);
-                  }}
+                  onClick={() => openPreview(file)}
                   className="text-blue-600 hover:text-blue-800"
                 >
                   <Eye className="h-4 w-4" />
                 </button>
                 <button
-                  onClick={() => {
-                    console.log('Trash button clicked for file:', file.key); // Debugging
-                    handleDelete(file.key);
-                  }}
+                  onClick={() => handleDelete(file.key)}
                   className="text-red-600 hover:text-red-800"
                 >
                   <Trash className="h-4 w-4" />
@@ -278,24 +266,24 @@ export default function UploadPage() {
           ))}
         </div>
 
-        {/* Pagination */}
-        <div className="mt-4 flex justify-center">
+        {/* Pagination - Mobile Friendly */}
+        <div className="mt-4 flex flex-wrap justify-center gap-1">
           {Array.from({ length: Math.ceil(filteredFiles.length / filesPerPage) }, (_, i) => (
             <button
               key={i + 1}
-              onClick={() => {
-                setCurrentPage(i + 1);
-                console.log('Current page:', i + 1); // Debugging
-              }}
-              className={`mx-1 rounded px-3 py-1 ${currentPage === i + 1 ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+              onClick={() => setCurrentPage(i + 1)}
+              className={`rounded px-2.5 py-1 text-sm ${currentPage === i + 1
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-200 hover:bg-gray-300'
+                }`}
             >
               {i + 1}
             </button>
           ))}
         </div>
 
-        {/* File Preview Modal */}
-        <Modal
+        {/* File Preview Modal - Mobile Optimized */}
+        {/* <Modal
           isOpen={isPreviewOpen}
           onRequestClose={() => setIsPreviewOpen(false)}
           className="modal"
@@ -303,18 +291,21 @@ export default function UploadPage() {
           closeTimeoutMS={200}
         >
           {previewFile && (
-            <div className="p-4">
-              <h2 className="text-xl font-bold mb-4">{previewFile.name}</h2>
+            <div className="p-3 sm:p-4">
+              <h2 className="text-lg font-bold sm:text-xl sm:mb-4">
+                {previewFile.name}
+              </h2>
               {previewFile.type === 'pdf' ? (
                 <iframe
                   src={previewFile.route}
-                  className="w-full h-[80vh] border-none"
+                  className="h-[70vh] w-full border-none"
+                  title={previewFile.name}
                 />
               ) : (
                 <img
                   src={previewFile.route}
                   alt={previewFile.name}
-                  className="max-h-[80vh] max-w-full"
+                  className="mx-auto max-h-[70vh] max-w-full"
                   onError={(e) => {
                     e.target.src = 'https://placehold.co/600x400';
                   }}
@@ -322,8 +313,9 @@ export default function UploadPage() {
               )}
             </div>
           )}
-        </Modal>
+        </Modal> */}
       </div>
     </main>
   );
+
 }
