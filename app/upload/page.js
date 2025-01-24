@@ -24,7 +24,8 @@ export default function UploadPage() {
     }
     setPreviewFile(file);
     setIsPreviewOpen(true);
-    console.log('Preview file state:', previewFile); // Debugging
+    console.log('Preview file route:', file.route); // Debugging
+    console.log('Preview file type:', file.type); // Debugging
   };
 
   // Toggle file selection
@@ -299,6 +300,7 @@ export default function UploadPage() {
           onRequestClose={() => setIsPreviewOpen(false)}
           className="modal"
           overlayClassName="overlay"
+          closeTimeoutMS={200}
         >
           {previewFile && (
             <div className="p-4">
@@ -306,14 +308,16 @@ export default function UploadPage() {
               {previewFile.type === 'pdf' ? (
                 <iframe
                   src={previewFile.route}
-                  title={previewFile.name}
-                  className="w-full h-[80vh]"
+                  className="w-full h-[80vh] border-none"
                 />
               ) : (
                 <img
                   src={previewFile.route}
                   alt={previewFile.name}
-                  className="max-h-[80vh] max-w-full mx-auto"
+                  className="max-h-[80vh] max-w-full"
+                  onError={(e) => {
+                    e.target.src = 'https://placehold.co/600x400';
+                  }}
                 />
               )}
             </div>
