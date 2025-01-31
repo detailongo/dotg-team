@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import AddCard from './AddCard'; // Make sure the file is actually named AddCard.js
+import AddCard from './AddCard'; // Make sure the file name matches
 
 const PaymentPopup = ({ onClose, stripeCustomerId, selectedEvent, onPaymentSuccess }) => {
   const [paymentMethods, setPaymentMethods] = useState([]);
@@ -21,12 +21,12 @@ const PaymentPopup = ({ onClose, stripeCustomerId, selectedEvent, onPaymentSucce
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            action: "charge", // Required by backend
+            action: 'charge', // Required by backend
             customer_id: customerId, // Match backend naming
             payment_method: paymentMethodId, // Match backend naming
             amount: Math.round(amount * 100),
             description,
-            zip_code: zipCode // Add ZIP code if required
+            zip_code: zipCode, // Add ZIP code if required
           }),
         }
       );
@@ -48,7 +48,7 @@ const PaymentPopup = ({ onClose, stripeCustomerId, selectedEvent, onPaymentSucce
     }
   };
 
-  const extractEmail = (desc) => (desc.match(/Email:\s*([^\s]+@[^\s]+)/i)?.[1] || null);
+  const extractEmail = (desc) => desc.match(/Email:\s*([^\s]+@[^\s]+)/i)?.[1] || null;
 
   const generateDescription = (event) => {
     const vehicle = event.description.match(/Vehicle:\s*\(([^)]+)\)/)?.[1] || 'Unknown';
@@ -67,7 +67,6 @@ Total: $${total.toFixed(2)}
 Location: ${event.location || 'Unknown'}`;
   };
 
-  // Move fetchMethods outside useEffect and memoize it
   const fetchMethods = useCallback(async () => {
     if (!stripeCustomerId) return;
     setIsFetching(true);
@@ -83,12 +82,11 @@ Location: ${event.location || 'Unknown'}`;
     } finally {
       setIsFetching(false);
     }
-  }, [stripeCustomerId]); // Add dependencies here
+  }, [stripeCustomerId]);
 
-  // Update useEffect to use the memoized version
   useEffect(() => {
     fetchMethods();
-  }, [fetchMethods]); // Now depends on the memoized function
+  }, [fetchMethods]);
 
   useEffect(() => {
     if (selectedEvent) setDescription(generateDescription(selectedEvent));
@@ -113,7 +111,7 @@ Location: ${event.location || 'Unknown'}`;
         onPaymentSuccess({
           amount: parseFloat(amount),
           description,
-          customerEmail: extractEmail(selectedEvent.description)
+          customerEmail: extractEmail(selectedEvent.description),
         });
       }
 
@@ -126,94 +124,104 @@ Location: ${event.location || 'Unknown'}`;
   return (
     <>
       <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex justify-center items-center z-50">
-        <div className="bg-white p-6 rounded-lg w-[90%] shadow-lg max-h-[80vh] overflow-y-auto">
+        {/* 
+          Add 'relative' so we can position the top-right close (X) button with absolute 
+        */}
+        <div className="relative bg-white p-6 rounded-lg w-[90%] shadow-lg max-h-[80vh] overflow-y-auto">
+          {/* Top-right close button */}
+          <button
+            onClick={onClose}
+            className="absolute top-3 right-3 text-gray-500 hover:text-gray-700 focus:outline-none"
+          >
+            &times;
+          </button>
+
           <h3 className="text-xl font-semibold mb-4">Process Payment</h3>
           <p className="text-gray-800 mb-2">Customer ID: {stripeCustomerId}</p>
 
           {isFetching ? (
             <p className="text-gray-600">Loading payment methods...</p>
           ) : paymentMethods.length > 0 ? (
-            <>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-gray-800 mb-1">Amount ($)</label>
-                  <input
-                    type="number"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="w-full p-2 border rounded"
-                    placeholder="Enter amount"
-                  />
-                </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-gray-800 mb-1">Amount ($)</label>
+                <input
+                  type="number"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="w-full p-2 border rounded"
+                  placeholder="Enter amount"
+                />
+              </div>
 
+              <div>
+                <label className="block text-gray-800 mb-1">Payment Method</label>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  className="w-full p-2 border rounded"
+                >
+                  <option value="">Select method</option>
+                  <option value="card">Credit Card</option>
+                  <option value="cash">Cash</option>
+                  <option value="check">Check</option>
+                </select>
+              </div>
+
+              {paymentMethod === 'card' && (
                 <div>
-                  <label className="block text-gray-800 mb-1">Payment Method</label>
+                  <label className="block text-gray-800 mb-1">Select Card</label>
                   <select
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    value={selectedCard}
+                    onChange={handleCardSelect}
                     className="w-full p-2 border rounded"
                   >
-                    <option value="">Select method</option>
-                    <option value="card">Credit Card</option>
-                    <option value="cash">Cash</option>
-                    <option value="check">Check</option>
+                    <option value="">Choose card</option>
+                    {paymentMethods.map((pm) => (
+                      <option key={pm.id} value={pm.id}>
+                        {pm.card.brand.toUpperCase()} ****{pm.card.last4} (Exp:{' '}
+                        {pm.card.exp_month}/{pm.card.exp_year})
+                      </option>
+                    ))}
+                    <option value="new">➕ Add new card</option>
                   </select>
                 </div>
+              )}
 
-                {paymentMethod === 'card' && (
-                  <div>
-                    <label className="block text-gray-800 mb-1">Select Card</label>
-                    <select
-                      value={selectedCard}
-                      onChange={handleCardSelect}
-                      className="w-full p-2 border rounded"
-                    >
-                      <option value="">Choose card</option>
-                      {paymentMethods.map((pm) => (
-                        <option key={pm.id} value={pm.id}>
-                          {pm.card.brand.toUpperCase()} ****{pm.card.last4} (Exp: {pm.card.exp_month}/{pm.card.exp_year})
-                        </option>
-                      ))}
-                      <option value="new">➕ Add new card</option>
-                    </select>
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-gray-800 mb-1">Description</label>
-                  <textarea
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    className="w-full p-2 border rounded h-32"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={autoSendInvoice}
-                    onChange={(e) => setAutoSendInvoice(e.target.checked)}
-                    className="h-4 w-4"
-                  />
-                  <label className="text-sm text-gray-700">Auto-send invoice email</label>
-                </div>
-
-                <div className="flex gap-4">
-                  <button
-                    onClick={handlePayment}
-                    className="flex-1 bg-blue-500 text-white py-2 rounded hover:bg-blue-600"
-                  >
-                    Confirm Payment
-                  </button>
-                  <button
-                    onClick={onClose}
-                    className="flex-1 bg-red-500 text-white py-2 rounded hover:bg-red-600"
-                  >
-                    Cancel
-                  </button>
-                </div>
+              <div>
+                <label className="block text-gray-800 mb-1">Description</label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full p-2 border rounded h-32"
+                />
               </div>
-            </>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={autoSendInvoice}
+                  onChange={(e) => setAutoSendInvoice(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                <label className="text-sm text-gray-700">Auto-send invoice email</label>
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  onClick={handlePayment}
+                  className="flex-1 bg-blue-500 text-white py-2 rounded hover:bg-blue-600"
+                >
+                  Confirm Payment
+                </button>
+                <button
+                  onClick={onClose}
+                  className="flex-1 bg-red-500 text-white py-2 rounded hover:bg-red-600"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           ) : (
             <p className="text-gray-600">No payment methods available</p>
           )}

@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import addCard from './AddCard';
+import React, { useState, useEffect, useCallback } from 'react';
+import AddCard from './AddCard'; // Make sure the file is actually named AddCard.js
 
 const PaymentPopup = ({ onClose, stripeCustomerId, selectedEvent, onPaymentSuccess }) => {
   const [paymentMethods, setPaymentMethods] = useState([]);
@@ -37,7 +37,7 @@ const PaymentPopup = ({ onClose, stripeCustomerId, selectedEvent, onPaymentSucce
       throw new Error(`Charge failed: ${error.message}`);
     }
   };
-  
+
   const handleCardSelect = (e) => {
     const value = e.target.value;
     if (value === 'new') {
@@ -67,26 +67,28 @@ Total: $${total.toFixed(2)}
 Location: ${event.location || 'Unknown'}`;
   };
 
-  useEffect(() => {
-    const fetchMethods = async () => {
-      if (!stripeCustomerId) return;
-      setIsFetching(true);
-      try {
-        const response = await fetch(
-          `https://us-central1-detail-on-the-go-universal.cloudfunctions.net/charge-customer-1?customerId=${stripeCustomerId}`,
+  // Move fetchMethods outside useEffect and memoize it
+  const fetchMethods = useCallback(async () => {
+    if (!stripeCustomerId) return;
+    setIsFetching(true);
+    try {
+      const response = await fetch(
+        `https://us-central1-detail-on-the-go-universal.cloudfunctions.net/charge-customer-1?customerId=${stripeCustomerId}`
+      );
+      const data = await response.json();
+      setPaymentMethods(data.paymentMethods || []);
+    } catch (error) {
+      console.error('Failed to fetch methods:', error);
+      setPaymentMethods([]);
+    } finally {
+      setIsFetching(false);
+    }
+  }, [stripeCustomerId]); // Add dependencies here
 
-        );
-        const data = await response.json();
-        setPaymentMethods(data.paymentMethods || []);
-      } catch (error) {
-        console.error('Failed to fetch methods:', error);
-        setPaymentMethods([]);
-      } finally {
-        setIsFetching(false);
-      }
-    };
+  // Update useEffect to use the memoized version
+  useEffect(() => {
     fetchMethods();
-  }, [stripeCustomerId]);
+  }, [fetchMethods]); // Now depends on the memoized function
 
   useEffect(() => {
     if (selectedEvent) setDescription(generateDescription(selectedEvent));
@@ -218,13 +220,12 @@ Location: ${event.location || 'Unknown'}`;
         </div>
       </div>
 
-      {/* <addCard
+      <AddCard
         visible={showAddCardPopup}
         onClose={() => setShowAddCardPopup(false)}
-        onCardAdded={fetchPaymentMethods}
-        customerId={stripeCustomerId} // Add this line
-
-      /> */}
+        onCardAdded={fetchMethods}
+        customerId={stripeCustomerId}
+      />
     </>
   );
 };
