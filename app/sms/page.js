@@ -1,13 +1,14 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, getDocs, doc, getDoc, onSnapshot, setDoc, arrayUnion, Timestamp } from 'firebase/firestore';
-import { Menu, X, Phone } from 'lucide-react';
-import { getAuth, onAuthStateChanged } from "firebase/auth";
+import { getFirestore, collection, getDocs } from 'firebase/firestore';
+import { Menu, X } from 'lucide-react';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import MessengerPopup from './sms-pop'; // <-- new popup component
 
-
-const firebaseConfig = {
+// Firebase config (no more "whatwg-fetch" import)
+export const firebaseConfig = {
   apiKey: "AIzaSyBMVa4EhYrz2NyYBdaVMJTS-JjfUIQDagQ",
   authDomain: "detail-on-the-go-universal.firebaseapp.com",
   projectId: "detail-on-the-go-universal",
@@ -20,466 +21,196 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-const MessengerPage = () => {
+export default function MessengerPage() {
   const [contacts, setContacts] = useState([]);
-  const [selectedContact, setSelectedContact] = useState(null);
-  const [message, setMessage] = useState('');
-  const [messages, setMessages] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const messagesEndRef = useRef(null);
-  const conversationViewRef = useRef(null);
-  const [delay, setDelay] = useState(0);
-  const [loading, setLoading] = useState(false);
   const [locationDetails, setLocationDetails] = useState(null);
 
-  // Initialize Firebase Auth
+  // State for the selected contact & popup
+  const [selectedContact, setSelectedContact] = useState(null);
+  const [showConversation, setShowConversation] = useState(false);
+
+  // Filter state: 'all' or 'unread'
+  const [filterMode, setFilterMode] = useState('all');
+
   const auth = getAuth();
 
-  // Track the logged-in user
+  // Track user login
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        console.log("User logged in:", user);
-        console.log("User email:", user.email);
+        console.log('User logged in:', user.email);
       } else {
-        console.log("No user logged in.");
+        console.log('No user logged in.');
       }
     });
-
-    return unsubscribe; // Cleanup on unmount
+    return unsubscribe;
   }, []);
 
-
+  // Load location details from sessionStorage
   useEffect(() => {
     const storedLocationDetails = sessionStorage.getItem('locationDetails');
     if (storedLocationDetails) {
-      const parsedDetails = JSON.parse(storedLocationDetails);
-      setLocationDetails(parsedDetails);
-      console.log('Location details loaded:', parsedDetails);
-    } else {
-      console.log('No location details found in sessionStorage');
+      const parsed = JSON.parse(storedLocationDetails);
+      setLocationDetails(parsed);
     }
   }, []);
 
-
-
-
-  // Existing fetchContacts and fetchMessages logic
+  // Fetch contacts from Firestore
   useEffect(() => {
     const fetchContacts = async () => {
-      if (!locationDetails) return;
-
-      const smsCollection = locationDetails.collectionId; // Dynamic collection
-      const contactsRef = collection(db, smsCollection);
+      if (!locationDetails?.collectionId) return;
 
       try {
-        const contactsSnapshot = await getDocs(contactsRef);
-        const contactsArray = [];
+        const smsCollection = locationDetails.collectionId; // e.g. "sms-lwr"
+        const snapshot = await getDocs(collection(db, smsCollection));
 
-        contactsSnapshot.forEach((doc) => {
-          const data = doc.data();
-          const lastMessage = data.messages?.slice().sort((a, b) => {
-            const aTimestamp =
-              (a.timestamp?.seconds || 0) * 1e9 +
-              (a.timestamp?.nanoseconds || 0);
-            const bTimestamp =
-              (b.timestamp?.seconds || 0) * 1e9 +
-              (b.timestamp?.nanoseconds || 0);
-            return bTimestamp - aTimestamp;
-          })[0] || {};
+        const contactsArr = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          const allMsgs = data.messages || [];
 
-          const lastMessageTimestamp = lastMessage.timestamp
+          // Sort messages by newest first
+          allMsgs.sort((a, b) => {
+            const aTime = (a.timestamp?.seconds || 0) * 1000;
+            const bTime = (b.timestamp?.seconds || 0) * 1000;
+            return bTime - aTime;
+          });
+
+          const lastMessage = allMsgs[0] || {};
+          const lastMsgTimestamp  = lastMessage.timestamp
             ? new Date(lastMessage.timestamp.seconds * 1000).toLocaleString()
             : null;
 
-          contactsArray.push({
-            id: doc.id,
+          // "Unread" if the last message is from the client (direction = 'incoming')
+          const isUnread = lastMessage.direction === 'incoming';
+
+          contactsArr.push({
+            id: docSnap.id,
             name: `${data.firstName || ''} ${data.lastName || ''}`.trim(),
-            phone: doc.id,
+            phone: docSnap.id,
             lastMessage: lastMessage.message || 'No messages yet',
-            lastMessageTimestamp,
+            lastMsgTimestamp,
+            lastMsgRawMillis: lastMessage.timestamp
+              ? lastMessage.timestamp.seconds * 1000
+              : 0,
+            isUnread,
           });
         });
 
-        contactsArray.sort(
-          (a, b) =>
-            new Date(b.lastMessageTimestamp) - new Date(a.lastMessageTimestamp)
-        );
+        // Default sort: newest-first
+        contactsArr.sort((a, b) => b.lastMsgRawMillis - a.lastMsgRawMillis);
 
-        setContacts(contactsArray);
+        setContacts(contactsArr);
       } catch (error) {
-        console.error("Error fetching contacts: ", error);
+        console.error('Error fetching contacts:', error);
       }
     };
 
     fetchContacts();
   }, [locationDetails]);
 
-
-  const fetchMessages = (contactId) => {
-    const contactDocRef = doc(db, "sms-lwr", contactId);
-
-    const unsubscribe = onSnapshot(contactDocRef, (doc) => {
-      if (doc.exists()) {
-        const contactData = doc.data();
-        const newMessages = contactData.messages || [];
-        setMessages(newMessages);
-
-        // Update the contact's last message details in the contact list
-        const lastMessage = newMessages
-          .slice()
-          .sort((a, b) => b.timestamp.seconds - a.timestamp.seconds)[0];
-
-        const updatedContacts = contacts.map(contact =>
-          contact.id === contactId
-            ? {
-              ...contact,
-              lastMessage: lastMessage?.message || 'No messages yet',
-              lastMessageTimestamp: lastMessage?.timestamp
-                ? new Date(lastMessage.timestamp.seconds * 1000).toLocaleString()
-                : null,
-            }
-            : contact
-        );
-
-        // Sort contacts by latest message timestamp
-        updatedContacts.sort((a, b) => new Date(b.lastMessageTimestamp) - new Date(a.lastMessageTimestamp));
-        setContacts(updatedContacts);
-      } else {
-        console.warn("No conversation found for contact");
-        setMessages([]);
+  // Combine search + unread filter
+  const filteredContacts = contacts
+    // Filter by search
+    .filter((c) =>
+      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.phone.includes(searchQuery)
+    )
+    // Filter by unread if needed
+    .filter((c) => {
+      if (filterMode === 'unread') {
+        return c.isUnread;
       }
+      return true;
     });
 
-    return unsubscribe;
-  };
-
-
-
+  // Select a contact & show popup
   const handleSelectContact = (contact) => {
     setSelectedContact(contact);
-    const unsubscribe = fetchMessages(contact.id);
-    if (window.innerWidth <= 768) {  // Close sidebar only on mobile devices
-      setIsSidebarOpen(false);
-    }
-    if (conversationViewRef.current) {
-      conversationViewRef.current.scrollTop = 0;
-    }
-    return () => unsubscribe();
+    setShowConversation(true);
   };
-
-
-
-
-  const applyShortcut = async (type) => {
-    switch (type) {
-      case 'getAvailability':
-        try {
-          const response = await fetch(
-            'https://us-central1-dotg-d6313.cloudfunctions.net/lawrence-phone-availability'
-          );
-          if (response.ok) {
-            const data = await response.json();
-            setMessage(`My next availability is: ${data}`);
-          } else {
-            setMessage('Failed to fetch availability.');
-          }
-        } catch (error) {
-          setMessage('Error fetching availability.');
-        }
-        break;
-      case 'onMyWay':
-        setMessage(`I'm headed your way now.`);
-        break;
-      case 'arrived':
-        setMessage(`I've just arrived, and will start shortly.`);
-        break;
-      case 'delay':
-        setMessage(
-          `My current detail is taking a bit longer than expected, so I may be running late to our appointment today. I apologize for the delay and will update you as soon as I'm on my way.
-        `);
-        break;
-      case 'early':
-        setMessage(
-          `I've just finished my current detail earlier than expected, and can head your way now if that works with your schedule. Let me know if not - thanks!
-       ` );
-        break;
-      case 'finished1':
-        setMessage(
-          `I'm close to wrapping up your detail now! If it's convenient, would you like to come look?
-        `);
-        break;
-      case 'finished2':
-        setMessage(
-          `I’ve just finished your detail. Thank you very much for having me out today, I’ll see you next time!
-        `);
-        break;
-      case 'LWRReview':
-        setMessage(
-          `I really appreciate you using my services, as there are lots of options. It would mean a lot if you left a review, it goes a long way for a small business! Here’s a temporary link if you enjoyed your detail: https://g.page/r/CcNAaNthnDf3EBM/review
-       ` );
-        break;
-      case 'KCReview':
-        setMessage(
-          `I really appreciate you using my services, as there are lots of options. It would mean a lot if you left a review, it goes a long way for a small business! Here’s a temporary link if you enjoyed your detail: https://g.page/r/CS98X9jMS0IREBM/review
-        `);
-        break;
-      case 'STLReview':
-        setMessage(
-          `I really appreciate you using my services, as there are lots of options. It would mean a lot if you left a review, it goes a long way for a small business! Here’s a temporary link if you enjoyed your detail: https://g.page/r/CaNuJ0ypIXA7EBM/review
-        `);
-        break;
-      default:
-        break;
-    }
-  };
-
-  const handleSendMessage = async (delay = 0) => {
-    if (!message.trim() || loading || !locationDetails) return;
-
-    setLoading(true); // Disable the send button
-    const phoneNumber = selectedContact?.id;
-    const businessNumber = locationDetails.businessNumber; // Use dynamic business number
-    const formattedMessage = `${message.trim()} - ${locationDetails.employeeName}, Detail On The Go`;
-
-    try {
-      const response = await fetch(
-        `https://us-central1-detail-on-the-go-universal.cloudfunctions.net/sms?to=${encodeURIComponent(
-          phoneNumber
-        )}&from=${encodeURIComponent(
-          businessNumber
-        )}&message=${encodeURIComponent(formattedMessage)}&delay=${delay}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (response.ok) {
-        setMessage(""); // Clear the input field
-      } else {
-        console.error("Error response:", await response.json());
-      }
-    } catch (error) {
-      console.error("Error sending message:", error);
-    } finally {
-      setLoading(false); // Re-enable the send button
-    }
-  };
-
-
-  const initiateCall = () => {
-    if (selectedContact && locationDetails) {
-      const clientNumber = selectedContact.phone;
-      const businessNumber = locationDetails.businessNumber;
-      const employeeNumber = locationDetails.employeeNumber;
-
-      fetch(`https://us-central1-dotg-d6313.cloudfunctions.net/LWR-create-call?businessnumber=${businessNumber}&forwardnumber=${employeeNumber}&clientnumber=${clientNumber}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ clientNumber: clientNumber })
-      })
-        .then(response => response.json())
-        .then(data => {
-          alert('Call initiated successfully!');
-        })
-        .catch((error) => {
-          console.error('Error initiating call:', error);
-          alert('Error initiating call. Please try again.');
-        });
-    } else {
-      alert('Please select a contact to initiate a call.');
-    }
-  };
-
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  const filteredContacts = contacts.filter((contact) =>
-    contact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    contact.phone.includes(searchQuery)
-  );
 
   return (
-    <div className="flex h-screen bg-gray-50 relative">
-      {/* Mobile Header - Always visible on mobile */}
-      <div className="lg:hidden fixed top-[70px] left-0 right-0 bg-white z-50 border-t flex justify-between items-center p-4 shadow-sm">
-        <button
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="p-2 hover:bg-gray-100 rounded-lg text-gray-700"
+    <div className="min-h-screen bg-gray-50 p-4">
+      {/* If we have location details, show them at the top */}
+      {locationDetails && (
+        <div className="mb-4 text-gray-700">
+          <h2 className="font-bold text-lg">{locationDetails.employeeName}</h2>
+          <p className="text-sm">{locationDetails.location}</p>
+        </div>
+      )}
+
+      {/* Row of filters */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        {/* Search bar */}
+        <input
+          placeholder="Search contacts..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="p-3 flex-1 border rounded-lg shadow-sm text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        />
+
+        {/* Filter by read/unread */}
+        <select
+          value={filterMode}
+          onChange={(e) => setFilterMode(e.target.value)}
+          className="p-2 border rounded-md"
         >
-          {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
-        </button>
-        {selectedContact && !isSidebarOpen && (
-          <div className="flex items-center gap-4">
-            <div>
-              <h2 className="font-semibold text-gray-900">{selectedContact.name}</h2>
-              <p className="text-sm text-gray-600">{selectedContact.phone}</p>
-            </div>
-            <button
-              onClick={initiateCall}
-              className="p-2 bg-green-600 text-white rounded-full hover:bg-green-700 shadow-sm"
+          <option value="all">All Contacts</option>
+          <option value="unread">Unread Only</option>
+        </select>
+      </div>
+
+      {/* Contact list (full width) */}
+      <div className="space-y-2 overflow-y-auto">
+        {filteredContacts.map((contact) => {
+          // If unread, we add an absolutely positioned overlay
+          // with animate-pulse so only the background pulses (not text).
+          const highlightOverlay = contact.isUnread ? (
+            <div className="absolute inset-0 bg-red-200 animate-pulse pointer-events-none" />
+          ) : null;
+
+          // If selected
+          const selectedClass = selectedContact?.id === contact.id
+            ? 'border-l-4 border-blue-600 bg-blue-50'
+            : 'hover:bg-gray-100';
+
+          return (
+            <div
+              key={contact.id}
+              className={`relative p-4 rounded-lg cursor-pointer transition-colors ${selectedClass}`}
+              onClick={() => handleSelectContact(contact)}
             >
-              <Phone size={20} />
-            </button>
-          </div>
-        )}
-      </div>
+              {highlightOverlay}
 
-      {/* Contacts Sidebar */}
-      <div className={`
-        fixed lg:static inset-y-0 left-0 z-40 w-full lg:w-1/3 bg-white transform transition-transform duration-300 ease-in-out shadow-lg lg:shadow-none
-        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-        ${selectedContact ? 'lg:border-r' : ''}
-        ${isSidebarOpen ? 'h-screen' : 'h-0 lg:h-screen'}
-      `}>
-        <div className="p-4 mt-16 lg:mt-0">
-          {locationDetails && (
-            <div className="mb-4 text-gray-700">
-              <h2 className="font-bold text-lg">{locationDetails.employeeName}</h2>
-              <p className="text-sm">{locationDetails.location}</p>
-            </div>
-          )}
-          <input
-            placeholder="Search contacts..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="mb-4 p-3 w-full border rounded-lg shadow-sm text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
-          <div className="space-y-2 overflow-y-auto max-h-[calc(100vh-8rem)]">
-            {filteredContacts.map((contact) => (
-              <div
-                key={contact.id}
-                className={`cursor-pointer p-4 hover:bg-gray-50 rounded-lg transition-colors
-                  ${selectedContact?.id === contact.id ? 'border-l-4 border-blue-600 bg-blue-50' : ''}
-                `}
-                onClick={() => handleSelectContact(contact)}
-              >
-                <h3 className="font-medium text-gray-900">{contact.name || contact.phone}</h3>
+              {/* Content is above any overlay */}
+              <div className="relative z-10">
+                <h3 className="font-medium text-gray-900">
+                  {contact.name || contact.phone}
+                </h3>
                 <p className="text-sm text-gray-600">{contact.phone}</p>
-                <p className="text-sm text-gray-700 mt-1 font-medium">{contact.lastMessage}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-
-      {/* Chat Area */}
-      <div className={`
-        flex-1 flex flex-col 
-        ${!isSidebarOpen ? 'visible' : 'hidden lg:flex'}
-        h-screen pt-16 lg:pt-0
-      `}>
-        {/* Desktop Header */}
-        <div className="hidden lg:flex bg-white border-b p-4 justify-between items-center shadow-sm">
-          {selectedContact && (
-            <>
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900">{selectedContact.name}</h2>
-                <p className="text-gray-600">{selectedContact.phone}</p>
-              </div>
-              <button
-                onClick={initiateCall}
-                className="p-2 bg-green-600 text-white rounded-full hover:bg-green-700 shadow-sm transition-colors"
-              >
-                <Phone size={20} />
-              </button>
-            </>
-          )}
-        </div>
-
-        {selectedContact ? (
-          <>
-            <div ref={conversationViewRef} className="flex-1 p-4 overflow-y-auto bg-gray-50">
-              {messages.length > 0 ? (
-                messages.map((msg, index) => (
-                  <div
-                    key={index}
-                    className={`max-w-[85%] mb-4 p-3 rounded-lg shadow-sm ${msg.direction === 'outgoing'
-                      ? 'ml-auto bg-blue-600 text-white'
-                      : 'bg-white text-gray-900 border border-gray-200'
-                      }`}
-                  >
-                    <p className="break-words leading-relaxed">{msg.message}</p>
-                    {msg.timestamp?.seconds && (
-                      <span className={`text-xs block mt-1 ${msg.direction === 'outgoing' ? 'text-blue-100' : 'text-gray-500'
-                        }`}>
-                        {new Date(msg.timestamp.seconds * 1000).toLocaleString()}
-                      </span>
-                    )}
-                  </div>
-                ))
-              ) : (
-                <p className="text-gray-600 text-center font-medium">No messages yet</p>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-
-            <div className="p-3 sm:p-4 bg-white border-t shadow-sm">
-              <div className="flex flex-col sm:flex-row gap-2">
-                <select
-                  onChange={(e) => applyShortcut(e.target.value)}
-                  className="p-3 border rounded-lg text-gray-900 bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Shortcut Messages</option>
-                  <option value="getAvailability">Get Availability</option>
-                  <option value="onMyWay">On My Way</option>
-                  <option value="arrived">Arrived</option>
-                  <option value="delay">Delay</option>
-                  <option value="early">Early Finish</option>
-                  <option value="finished1">Close to Wrapping Up</option>
-                  <option value="finished2">Finished Detail</option>
-                  <option value="LWRReview">LWR Review</option>
-                  <option value="KCReview">KC Review</option>
-                  <option value="STLReview">STL Review</option>
-                </select>
-                <div className="flex gap-2 flex-1">
-                  <textarea
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    placeholder="Type your message..."
-                    className="flex-1 p-3 border rounded-lg shadow-sm text-gray-900 placeholder-gray-500 resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    rows={1}
-                  />
-                  <div className="flex items-center gap-2">
-                    <select
-                      onChange={(e) => setDelay(Number(e.target.value))}
-                      value={delay}
-                      className="p-2 border rounded-lg"
-                    >
-                      <option value={0}>Send Now</option>
-                      <option value={1}>1 Minute</option>
-                      <option value={5}>5 Minutes</option>
-                      <option value={10}>10 Minutes</option>
-                      <option value={30}>30 Minutes</option>
-                    </select>
-                    <button
-                      onClick={() => handleSendMessage(delay)}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg"
-                    >
-                      Send
-                    </button>
-                  </div>
-                </div>
+                <p className="text-sm text-gray-700 mt-1 font-medium">
+                  {contact.lastMessage}
+                </p>
               </div>
             </div>
-          </>
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-gray-600 font-medium">
-            <p className="text-center">Select a contact to start messaging</p>
-          </div>
-        )}
+          );
+        })}
       </div>
+
+      {/* Popup for the selected conversation */}
+      {showConversation && selectedContact && (
+        <MessengerPopup
+          isOpen={showConversation}
+          onClose={() => {
+            setShowConversation(false);
+            setSelectedContact(null);
+          }}
+          businessNumber={locationDetails?.businessNumber || ''}
+          clientNumber={selectedContact.phone}
+        />
+      )}
     </div>
   );
-};
-
-export default MessengerPage;
+}
