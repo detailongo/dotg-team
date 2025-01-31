@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, getDocs } from 'firebase/firestore';
+import { getFirestore, collection, getDocs,onSnapshot  } from 'firebase/firestore';
 import { Menu, X } from 'lucide-react';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import MessengerPopup from './sms-pop'; // <-- new popup component
@@ -26,16 +26,12 @@ export default function MessengerPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [locationDetails, setLocationDetails] = useState(null);
 
-  // State for the selected contact & popup
   const [selectedContact, setSelectedContact] = useState(null);
   const [showConversation, setShowConversation] = useState(false);
 
-  // Filter state: 'all' or 'unread'
   const [filterMode, setFilterMode] = useState('all');
-
   const auth = getAuth();
 
-  // Track user login
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -47,85 +43,90 @@ export default function MessengerPage() {
     return unsubscribe;
   }, []);
 
-  // Load location details from sessionStorage
   useEffect(() => {
     const storedLocationDetails = sessionStorage.getItem('locationDetails');
     if (storedLocationDetails) {
-      const parsed = JSON.parse(storedLocationDetails);
-      setLocationDetails(parsed);
+      setLocationDetails(JSON.parse(storedLocationDetails));
     }
   }, []);
 
-  // Fetch contacts from Firestore
+  // Real-time listener for contacts in Firestore
   useEffect(() => {
-    const fetchContacts = async () => {
-      if (!locationDetails?.collectionId) return;
+    if (!locationDetails?.collectionId) return;
 
-      try {
-        const smsCollection = locationDetails.collectionId; // e.g. "sms-lwr"
-        const snapshot = await getDocs(collection(db, smsCollection));
+    const smsCollection = collection(db, locationDetails.collectionId);
+    const unsubscribe = onSnapshot(smsCollection, (snapshot) => {
+      const contactsArr = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        const allMsgs = data.messages || [];
 
-        const contactsArr = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          const allMsgs = data.messages || [];
-
-          // Sort messages by newest first
-          allMsgs.sort((a, b) => {
-            const aTime = (a.timestamp?.seconds || 0) * 1000;
-            const bTime = (b.timestamp?.seconds || 0) * 1000;
-            return bTime - aTime;
-          });
-
-          const lastMessage = allMsgs[0] || {};
-          const lastMsgTimestamp  = lastMessage.timestamp
-            ? new Date(lastMessage.timestamp.seconds * 1000).toLocaleString()
-            : null;
-
-          // "Unread" if the last message is from the client (direction = 'incoming')
-          const isUnread = lastMessage.direction === 'incoming';
-
-          contactsArr.push({
-            id: docSnap.id,
-            name: `${data.firstName || ''} ${data.lastName || ''}`.trim(),
-            phone: docSnap.id,
-            lastMessage: lastMessage.message || 'No messages yet',
-            lastMsgTimestamp,
-            lastMsgRawMillis: lastMessage.timestamp
-              ? lastMessage.timestamp.seconds * 1000
-              : 0,
-            isUnread,
-          });
+        // Sort messages by newest first
+        allMsgs.sort((a, b) => {
+          const aTime = (a.timestamp?.seconds || 0) * 1000;
+          const bTime = (b.timestamp?.seconds || 0) * 1000;
+          return bTime - aTime;
         });
 
-        // Default sort: newest-first
-        contactsArr.sort((a, b) => b.lastMsgRawMillis - a.lastMsgRawMillis);
+        const lastMessage = allMsgs[0] || {};
+        const lastMsgTimestamp = lastMessage.timestamp
+          ? new Date(lastMessage.timestamp.seconds * 1000).toLocaleString()
+          : null;
 
-        setContacts(contactsArr);
-      } catch (error) {
-        console.error('Error fetching contacts:', error);
-      }
-    };
+        const isUnread = lastMessage.direction === 'incoming';
 
-    fetchContacts();
+        contactsArr.push({
+          id: docSnap.id,
+          name: `${data.firstName || ''} ${data.lastName || ''}`.trim(),
+          phone: docSnap.id,
+          lastMessage: lastMessage.message || 'No messages yet',
+          lastMsgTimestamp,
+          lastMsgRawMillis: lastMessage.timestamp
+            ? lastMessage.timestamp.seconds * 1000
+            : 0,
+          isUnread,
+        });
+      });
+
+      // Sort newest-first
+      contactsArr.sort((a, b) => b.lastMsgRawMillis - a.lastMsgRawMillis);
+      setContacts(contactsArr);
+    });
+
+    return () => unsubscribe();
   }, [locationDetails]);
 
-  // Combine search + unread filter
+  // Mark as read immediately (optimistic update), then call backend
+  const handleMarkAsRead = (contact) => {
+    // Optimistic update
+    setContacts((prev) =>
+      prev.map((c) => (c.id === contact.id ? { ...c, isUnread: false } : c))
+    );
+
+    // Then call Cloud Function
+    fetch(
+      `https://us-central1-detail-on-the-go-universal.cloudfunctions.net/read-text?to=${encodeURIComponent(
+        contact.phone
+      )}&from=${encodeURIComponent(locationDetails?.businessNumber || '')}&message=${encodeURIComponent(
+        'Read'
+      )}&delay=0`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }
+    ).catch((err) => {
+      console.error('Error marking as read:', err);
+    });
+  };
+
+  // Filtered contacts
   const filteredContacts = contacts
-    // Filter by search
     .filter((c) =>
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.phone.includes(searchQuery)
     )
-    // Filter by unread if needed
-    .filter((c) => {
-      if (filterMode === 'unread') {
-        return c.isUnread;
-      }
-      return true;
-    });
+    .filter((c) => (filterMode === 'unread' ? c.isUnread : true));
 
-  // Select a contact & show popup
   const handleSelectContact = (contact) => {
     setSelectedContact(contact);
     setShowConversation(true);
@@ -133,7 +134,6 @@ export default function MessengerPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4">
-      {/* If we have location details, show them at the top */}
       {locationDetails && (
         <div className="mb-4 text-gray-700">
           <h2 className="font-bold text-lg">{locationDetails.employeeName}</h2>
@@ -141,9 +141,7 @@ export default function MessengerPage() {
         </div>
       )}
 
-      {/* Row of filters */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
-        {/* Search bar */}
         <input
           placeholder="Search contacts..."
           value={searchQuery}
@@ -151,7 +149,6 @@ export default function MessengerPage() {
           className="p-3 flex-1 border rounded-lg shadow-sm text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
         />
 
-        {/* Filter by read/unread */}
         <select
           value={filterMode}
           onChange={(e) => setFilterMode(e.target.value)}
@@ -162,19 +159,16 @@ export default function MessengerPage() {
         </select>
       </div>
 
-      {/* Contact list (full width) */}
       <div className="space-y-2 overflow-y-auto">
         {filteredContacts.map((contact) => {
-          // If unread, we add an absolutely positioned overlay
-          // with animate-pulse so only the background pulses (not text).
           const highlightOverlay = contact.isUnread ? (
             <div className="absolute inset-0 bg-red-200 animate-pulse pointer-events-none" />
           ) : null;
 
-          // If selected
-          const selectedClass = selectedContact?.id === contact.id
-            ? 'border-l-4 border-blue-600 bg-blue-50'
-            : 'hover:bg-gray-100';
+          const selectedClass =
+            selectedContact?.id === contact.id
+              ? 'border-l-4 border-blue-600 bg-blue-50'
+              : 'hover:bg-gray-100';
 
           return (
             <div
@@ -183,8 +177,6 @@ export default function MessengerPage() {
               onClick={() => handleSelectContact(contact)}
             >
               {highlightOverlay}
-
-              {/* Content is above any overlay */}
               <div className="relative z-10">
                 <h3 className="font-medium text-gray-900">
                   {contact.name || contact.phone}
@@ -193,13 +185,23 @@ export default function MessengerPage() {
                 <p className="text-sm text-gray-700 mt-1 font-medium">
                   {contact.lastMessage}
                 </p>
+                {contact.isUnread && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleMarkAsRead(contact);
+                    }}
+                    className="mt-2 px-3 py-1 bg-blue-600 text-white rounded-md"
+                  >
+                    Read
+                  </button>
+                )}
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Popup for the selected conversation */}
       {showConversation && selectedContact && (
         <MessengerPopup
           isOpen={showConversation}
@@ -214,3 +216,9 @@ export default function MessengerPage() {
     </div>
   );
 }
+
+
+
+
+
+
