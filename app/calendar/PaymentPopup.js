@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import AddCard from './AddCard'; // Make sure the file name matches
 
-const PaymentPopup = ({ onClose, stripeCustomerId, selectedEvent, onPaymentSuccess }) => {
+const PaymentPopup = ({ onClose, businessNumber, clientName, clientNumber, stripeCustomerId, selectedEvent, onPaymentSuccess }) => {
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [isFetching, setIsFetching] = useState(false);
   const [amount, setAmount] = useState('');
@@ -106,6 +106,33 @@ Location: ${event.location || 'Unknown'}`;
       );
 
       alert('Payment successful!');
+
+      const clientData = {
+        timestamp: new Date().toLocaleString(), // Use the same timestamp as the message
+        businessNumber: businessNumber,
+        name: clientName,
+        phone: clientNumber,
+        message: "Payment Collected",
+
+      };
+
+      const sheetsResponse = await fetch(
+        'https://us-central1-detail-on-the-go-universal.cloudfunctions.net/detail-sms-timing',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(clientData), // Send client data as JSON
+        }
+      );
+
+      if (!sheetsResponse.ok) {
+        console.error('Failed to send client data to backend');
+      } else {
+        console.log('Client data successfully sent to backend');
+      }
+
 
       if (autoSendInvoice && onPaymentSuccess) {
         onPaymentSuccess({

@@ -58,8 +58,10 @@ export default function MessengerPopup({ isOpen, onClose, businessNumber, client
     if (!newMessage.trim()) return;
 
     setIsLoading(true);
+
     try {
-      const response = await fetch(
+      // Step 1: Send the SMS
+      const smsResponse = await fetch(
         `https://us-central1-detail-on-the-go-universal.cloudfunctions.net/sms?to=${encodeURIComponent(
           clientNumber
         )}&from=${encodeURIComponent(businessNumber)}&message=${encodeURIComponent(newMessage)}&delay=${delay}`,
@@ -69,22 +71,57 @@ export default function MessengerPopup({ isOpen, onClose, businessNumber, client
         }
       );
 
-      if (response.ok) {
-        const now = new Date();
-        setMessages((prev) =>
-          [...prev, {
-            message: newMessage,
-            direction: 'outgoing',
-            timestamp: now.toLocaleString(),
-            rawTimestamp: now.getTime(),
-          }].sort((a, b) => a.rawTimestamp - b.rawTimestamp)
-        );
-        setNewMessage('');
-      } else {
+      if (!smsResponse.ok) {
         console.error('Failed to send message');
+        return; // Stop if SMS fails
       }
+
+      // Step 2: Update the UI with the new message
+      const now = new Date();
+      setMessages((prev) =>
+        [...prev, {
+          message: newMessage,
+          direction: 'outgoing',
+          timestamp: now.toLocaleString(),
+          rawTimestamp: now.getTime(),
+        }].sort((a, b) => a.rawTimestamp - b.rawTimestamp)
+      );
+      setNewMessage('');
+
+      // Step 3: Prepare client information to log
+      const clientData = {
+        timestamp: now.toLocaleString(), // Use the same timestamp as the message
+        businessNumber: businessNumber,
+        name: clientInfo.name,
+        phone: clientInfo.phone,
+        message: newMessage,
+
+      };
+
+      if (newMessage.includes("I've just arrived") || newMessage.includes("I'm headed your")) {
+        const sheetsResponse = await fetch(
+          'https://us-central1-detail-on-the-go-universal.cloudfunctions.net/detail-sms-timing',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(clientData), // Send client data as JSON
+          }
+        );
+
+        if (!sheetsResponse.ok) {
+          console.error('Failed to send client data to backend');
+        } else {
+          console.log('Client data successfully sent to backend');
+        }
+      } else {
+        console.log("")
+      }
+
+
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error('Error:', error);
     } finally {
       setIsLoading(false);
     }
@@ -158,11 +195,10 @@ export default function MessengerPopup({ isOpen, onClose, businessNumber, client
             messages.map((msg, index) => (
               <div
                 key={index}
-                className={`mb-4 p-3 rounded-lg shadow-sm ${
-                  msg.direction === 'outgoing'
-                    ? 'bg-blue-600 text-white ml-auto'
-                    : 'bg-white text-gray-900 border'
-                }`}
+                className={`mb-4 p-3 rounded-lg shadow-sm ${msg.direction === 'outgoing'
+                  ? 'bg-blue-600 text-white ml-auto'
+                  : 'bg-white text-gray-900 border'
+                  }`}
               >
                 <p className="text-sm">{msg.message}</p>
                 <span className="text-xs text-gray-400">{msg.timestamp}</span>

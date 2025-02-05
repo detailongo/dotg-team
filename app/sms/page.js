@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, getDocs,onSnapshot  } from 'firebase/firestore';
-import { Menu, X } from 'lucide-react';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import MessengerPopup from './sms-pop'; // <-- new popup component
 
@@ -35,7 +34,7 @@ export default function MessengerPage() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        console.log('User logged in:', user.email);
+        console.log('User logged in:');
       } else {
         console.log('No user logged in.');
       }

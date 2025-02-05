@@ -364,97 +364,100 @@ const CalendarPage = () => {
           </div>
         )}
 
-{isPopupVisible && selectedEvent && (
-  <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex justify-center items-center z-50">
-    {/* 
+        {isPopupVisible && selectedEvent && (
+          <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex justify-center items-center z-50">
+            {/* 
       - Full screen for small devices: w-full h-full
       - Larger devices: w-[90%], auto height, max height 80vh
       - 'relative' so we can absolutely position the close button
     */}
-    <div className="relative bg-white p-6 rounded-lg w-full h-full sm:w-[90%] sm:h-auto sm:max-h-[80vh] shadow-lg overflow-y-auto">
-      {/* Big "X" Close Button (top-right) */}
-      <button
-        onClick={closePopup}
-        className="absolute top-3 right-3 text-gray-700 hover:text-gray-900 text-2xl sm:text-3xl"
-      >
-        &times;
-      </button>
+            <div className="relative bg-white p-6 rounded-lg w-full h-full sm:w-[90%] sm:h-auto sm:max-h-[80vh] shadow-lg overflow-y-auto">
+              {/* Big "X" Close Button (top-right) */}
+              <button
+                onClick={closePopup}
+                className="absolute top-3 right-3 text-gray-700 hover:text-gray-900 text-2xl sm:text-3xl"
+              >
+                &times;
+              </button>
 
-      <h3 className="text-xl font-semibold text-gray-900 mb-4">
-        {selectedEvent.title}
-      </h3>
-      <p className="text-gray-800">
-        <strong>Start:</strong>{' '}
-        {new Date(selectedEvent.start).toLocaleString()}
-      </p>
-      <p className="text-gray-800">
-        <strong>End:</strong>{' '}
-        {selectedEvent.end
-          ? new Date(selectedEvent.end).toLocaleString()
-          : 'N/A'}
-      </p>
-      {selectedEvent.location && (
-        <p className="text-gray-800 mt-2">
-          <strong>Location:</strong> {selectedEvent.location}
-        </p>
-      )}
-      {selectedEvent.description && (
-        <div className="text-gray-800 mt-2">
-          <strong>Description:</strong>
-          <div
-            className="whitespace-pre-wrap mt-2"
-            dangerouslySetInnerHTML={{
-              __html: selectedEvent.description
-                .replace(/<br>/g, '\n')
-                .replace(/<a href="(.+?)" target="_blank">(.+?)<\/a>/g, '$2 ($1)')
-                .replace(/&amp;/g, '&')
-                .replace(/<u>(.+?)<\/u>/g, '<strong>$1</strong>'),
-            }}
-          />
-        </div>
-      )}
+              <h3 className="text-xl font-semibold text-gray-900 mb-4">
+                {selectedEvent.title}
+              </h3>
+              <p className="text-gray-800">
+                <strong>Start:</strong>{' '}
+                {new Date(selectedEvent.start).toLocaleString()}
+              </p>
+              <p className="text-gray-800">
+                <strong>End:</strong>{' '}
+                {selectedEvent.end
+                  ? new Date(selectedEvent.end).toLocaleString()
+                  : 'N/A'}
+              </p>
+              {selectedEvent.location && (
+                <p className="text-gray-800 mt-2">
+                  <strong>Location:</strong> {selectedEvent.location}
+                </p>
+              )}
+              {selectedEvent.description && (
+                <div className="text-gray-800 mt-2">
+                  <strong>Description:</strong>
+                  <div
+                    className="whitespace-pre-wrap mt-2"
+                    dangerouslySetInnerHTML={{
+                      __html: selectedEvent.description
+                        .replace(/<br>/g, '\n')
+                        .replace(/<a href="(.+?)" target="_blank">(.+?)<\/a>/g, '$2 ($1)')
+                        .replace(/&amp;/g, '&')
+                        .replace(/<u>(.+?)<\/u>/g, '<strong>$1</strong>'),
+                    }}
+                  />
+                </div>
+              )}
 
-      <div className="mt-4 space-y-2">
-        <button
-          onClick={() => {
-            const stripped = selectedEvent.description.replace(
-              /<[^>]+>/g,
-              ' '
-            );
-            const match = stripped.match(/Stripe:\s*(cus_[a-zA-Z0-9]+)/);
-            if (match?.[1]) {
-              setStripeCustomerId(match[1].trim());
-              setIsPaymentPopupVisible(true);
-            } else {
-              alert('No Stripe Customer ID found');
-            }
-          }}
-          className="w-full bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
-        >
-          View Payment & Charge
-        </button>
-        <button
-          onClick={handleSmsClick}
-          className="w-full bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600"
-        >
-          Send SMS
-        </button>
-        <button
-          onClick={handleEmailClick}
-          className="w-full bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600"
-        >
-          Send Email
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+              <div className="mt-4 space-y-2">
+                <button
+                  onClick={() => {
+                    const stripped = selectedEvent.description.replace(
+                      /<[^>]+>/g,
+                      ' '
+                    );
+                    const match = stripped.match(/Stripe:\s*(cus_[a-zA-Z0-9]+)/);
+                    if (match?.[1]) {
+                      setStripeCustomerId(match[1].trim());
+                      setIsPaymentPopupVisible(true);
+                    } else {
+                      alert('No Stripe Customer ID found');
+                    }
+                  }}
+                  className="w-full bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+                >
+                  View Payment & Charge
+                </button>
+                <button
+                  onClick={handleSmsClick}
+                  className="w-full bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600"
+                >
+                  Send SMS
+                </button>
+                <button
+                  onClick={handleEmailClick}
+                  className="w-full bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600"
+                >
+                  Send Email
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
 
         {isPaymentPopupVisible && (
           <Suspense fallback={<div>Loading payment...</div>}>
             <PaymentPopup
               onClose={() => setIsPaymentPopupVisible(false)}
+              businessNumber={businessNumber}
+              clientName={extractFromDescription(/Client Name:\s*([^\n]+)/i)}
+              clientNumber={clientPhone}
               stripeCustomerId={stripeCustomerId}
               selectedEvent={selectedEvent}
               onPaymentSuccess={(details) => {
