@@ -21,6 +21,7 @@ const CalendarPage = () => {
   const [clientPhone, setClientPhone] = useState('');
   const [clientEmail, setClientEmail] = useState('');
   const [businessNumber, setBusinessNumber] = useState('');
+  const [branch, setBranch] = useState('');
   const [invoiceDetails, setInvoiceDetails] = useState(null);
 
   useEffect(() => {
@@ -28,6 +29,8 @@ const CalendarPage = () => {
     if (storedLocationDetails) {
       const parsedDetails = JSON.parse(storedLocationDetails);
       setBusinessNumber(parsedDetails.businessNumber || '');
+      setBranch(parsedDetails.branch || '');
+
     }
   }, []);
 
@@ -454,6 +457,7 @@ const CalendarPage = () => {
         {isPaymentPopupVisible && (
           <Suspense fallback={<div>Loading payment...</div>}>
             <PaymentPopup
+              branch={branch}
               onClose={() => setIsPaymentPopupVisible(false)}
               businessNumber={businessNumber}
               clientName={extractFromDescription(/Client Name:\s*([^\n]+)/i)}

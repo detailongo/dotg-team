@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import AddCard from './AddCard'; // Make sure the file name matches
 
-const PaymentPopup = ({ onClose, businessNumber, clientName, clientNumber, stripeCustomerId, selectedEvent, onPaymentSuccess }) => {
+const PaymentPopup = ({ branch, onClose, businessNumber, clientName, clientNumber, stripeCustomerId, selectedEvent, onPaymentSuccess }) => {
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [isFetching, setIsFetching] = useState(false);
   const [amount, setAmount] = useState('');
@@ -21,12 +21,13 @@ const PaymentPopup = ({ onClose, businessNumber, clientName, clientNumber, strip
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            action: 'charge', // Required by backend
-            customer_id: customerId, // Match backend naming
-            payment_method: paymentMethodId, // Match backend naming
+            action: 'charge',
+            customer_id: customerId,
+            payment_method: paymentMethodId,
             amount: Math.round(amount * 100),
             description,
-            zip_code: zipCode, // Add ZIP code if required
+            zip_code: zipCode,
+            location: branch // 👈 Add this field (e.g., from a form input or variable)
           }),
         }
       );
@@ -72,7 +73,7 @@ Location: ${event.location || 'Unknown'}`;
     setIsFetching(true);
     try {
       const response = await fetch(
-        `https://us-central1-detail-on-the-go-universal.cloudfunctions.net/charge-customer-1?customerId=${stripeCustomerId}`
+        `https://us-central1-detail-on-the-go-universal.cloudfunctions.net/payment-methods?customerId=${stripeCustomerId}`
       );
       const data = await response.json();
       setPaymentMethods(data.paymentMethods || []);
@@ -102,7 +103,8 @@ Location: ${event.location || 'Unknown'}`;
         stripeCustomerId,
         selectedCard,
         parseFloat(amount),
-        description
+        description,
+
       );
 
       alert('Payment successful!');
