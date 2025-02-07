@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import AddCard from './AddCard'; // Make sure the file name matches
 
 const PaymentPopup = ({ branch, onClose, businessNumber, clientName, clientNumber, stripeCustomerId, selectedEvent, onPaymentSuccess }) => {
+  console.log(branch,"##", clientName, "##",clientNumber, "##",)
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [isFetching, setIsFetching] = useState(false);
   const [amount, setAmount] = useState('');
@@ -13,8 +14,9 @@ const PaymentPopup = ({ branch, onClose, businessNumber, clientName, clientNumbe
   const [autoSendInvoice, setAutoSendInvoice] = useState(true);
   const [showAddCardPopup, setShowAddCardPopup] = useState(false);
 
-  const chargeCustomer = async (customerId, paymentMethodId, amount, description, zipCode) => {
+  const chargeCustomer = async (branch, customerId, paymentMethodId, amount, description, zipCode, businessNumber,clientName,clientNumber) => { // 👈 Add branch, businessNumber, clientInfo as parameters
     try {
+      // 1. Process payment first
       const response = await fetch(
         'https://us-central1-detail-on-the-go-universal.cloudfunctions.net/stripe-create-add-charge',
         {
@@ -27,17 +29,45 @@ const PaymentPopup = ({ branch, onClose, businessNumber, clientName, clientNumbe
             amount: Math.round(amount * 100),
             description,
             zip_code: zipCode,
-            location: branch // 👈 Add this field (e.g., from a form input or variable)
+            location: branch
           }),
         }
       );
       const data = await response.json();
       if (!response.ok) throw new Error(data.error?.message || data.error);
-      return data;
+
+      // 2. Only run this if payment succeeded
+      const now = new Date(); // 👈 Define timestamp
+      const clientData = {
+        timestamp: now.toLocaleString(),
+        businessNumber: businessNumber,
+        name: clientName,
+        phone: clientNumber,
+        message: "Card Payment Collected: "+ amount,
+      };
+
+      const sheetsResponse = await fetch(
+        'https://us-central1-detail-on-the-go-universal.cloudfunctions.net/detail-sms-timing',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(clientData),
+        }
+      );
+
+      if (!sheetsResponse.ok) {
+        console.error('Failed to send client data to backend');
+      } else {
+        console.log('Client data successfully sent to backend');
+      }
+
+      return data; // Return Stripe response
+
     } catch (error) {
       throw new Error(`Charge failed: ${error.message}`);
     }
   };
+
 
   const handleCardSelect = (e) => {
     const value = e.target.value;
@@ -99,12 +129,23 @@ Location: ${event.location || 'Unknown'}`;
     if (paymentMethod === 'card' && !selectedCard) return alert('Select card');
 
     try {
+      console.log(branch,"#",
+        stripeCustomerId,"#",
+        selectedCard,"#",
+        parseFloat(amount),"#",
+        description,"#",
+        businessNumber,"#",
+        clientName,"#",
+        clientNumber)
       const result = await chargeCustomer(
+        branch,
         stripeCustomerId,
         selectedCard,
         parseFloat(amount),
         description,
-
+        businessNumber,
+        clientName,
+        clientNumber
       );
 
       alert('Payment successful!');

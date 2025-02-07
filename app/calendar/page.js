@@ -19,6 +19,7 @@ const CalendarPage = () => {
   const [isSmsPopupVisible, setIsSmsPopupVisible] = useState(false);
   const [isEmailPopupVisible, setIsEmailPopupVisible] = useState(false);
   const [clientPhone, setClientPhone] = useState('');
+  const [clientName, setClientName] = useState('');
   const [clientEmail, setClientEmail] = useState('');
   const [businessNumber, setBusinessNumber] = useState('');
   const [branch, setBranch] = useState('');
@@ -29,6 +30,7 @@ const CalendarPage = () => {
     if (storedLocationDetails) {
       const parsedDetails = JSON.parse(storedLocationDetails);
       setBusinessNumber(parsedDetails.businessNumber || '');
+      // setClientName(parsedDetails.businessNumber || '');
       setBranch(parsedDetails.branch || '');
 
     }
@@ -137,8 +139,11 @@ const CalendarPage = () => {
   const groupedEvents = eventsByDay(events);
 
   const handleEventClick = (event) => {
+    console.log(event.title)
+    setClientName(event.title);
     setSelectedEvent(event);
     setIsPopupVisible(true);
+    
   };
 
   const closePopup = () => {
@@ -160,7 +165,15 @@ const CalendarPage = () => {
     const match = stripped.match(pattern);
     return match?.[1]?.trim() || null;
   };
-
+  const extractFromDescription2 = (pattern) => {
+    if (!selectedEvent?.description) return null;
+    const stripped = selectedEvent.description.replace(/<[^>]+>/g, ' ');
+    const match = stripped.match(pattern);
+    console.log("Test" + selectedEvent.title)
+    return match?.[1]?.trim() || null;
+  };
+  
+  
   const handleSmsClick = () => {
     const storedDetails = sessionStorage.getItem('locationDetails');
     if (!storedDetails) return alert('Business configuration missing');
@@ -172,18 +185,25 @@ const CalendarPage = () => {
     const phone = extractFromDescription(/Phone(?: Number)?:\s*([+\d\s\-()]+)/i);
     if (!phone) return alert('No client phone found');
 
+    
     const normalizedPhone = normalizePhoneNumber(phone);
     if (!normalizedPhone) return alert('Invalid phone format');
-
+    console.log("normalizedPhone: "+ normalizedPhone)
+    console.log("Name; " + clientName)
     setBusinessNumber(businessPhone);
     setClientPhone(normalizedPhone);
     setIsSmsPopupVisible(true);
+
   };
+
+
 
   const handleEmailClick = () => {
     const email = extractFromDescription(/Email:\s*([^\s]+@[^\s]+)/i);
+    const phoneNumber = extractFromDescription(/Phone Number:\s*(\d+)/i);
     if (email) {
       setClientEmail(email);
+      
       setIsEmailPopupVisible(true);
     } else {
       alert('No client email found');
@@ -457,10 +477,11 @@ const CalendarPage = () => {
         {isPaymentPopupVisible && (
           <Suspense fallback={<div>Loading payment...</div>}>
             <PaymentPopup
+
               branch={branch}
               onClose={() => setIsPaymentPopupVisible(false)}
               businessNumber={businessNumber}
-              clientName={extractFromDescription(/Client Name:\s*([^\n]+)/i)}
+              clientName={clientName}
               clientNumber={clientPhone}
               stripeCustomerId={stripeCustomerId}
               selectedEvent={selectedEvent}
@@ -490,7 +511,7 @@ const CalendarPage = () => {
               isOpen={isEmailPopupVisible}
               onClose={() => setIsEmailPopupVisible(false)}
               clientEmail={clientEmail}
-              clientName={extractFromDescription(/Client Name:\s*([^\n]+)/i)}
+              clientName={clientName}
               invoiceDetails={invoiceDetails}
             />
           </Suspense>

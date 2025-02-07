@@ -98,7 +98,7 @@ export default function MessengerPopup({ isOpen, onClose, businessNumber, client
 
       };
 
-      if (newMessage.includes("I've just arrived") || newMessage.includes("I'm headed your")) {
+      if (newMessage.includes("I've just arrived") || newMessage.includes("I'm headed your")|| newMessage.includes("wrapping")|| newMessage.includes("finished")) {
         const sheetsResponse = await fetch(
           'https://us-central1-detail-on-the-go-universal.cloudfunctions.net/detail-sms-timing',
           {
