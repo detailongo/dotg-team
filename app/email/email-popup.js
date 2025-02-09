@@ -9,43 +9,137 @@ export default function EmailPopup({ isOpen, onClose, clientEmail, clientName, i
     fromEmail: '',
     to: '',
     subject: '',
-    message: '',
+    message: '', // Plain text for editing
     photoUrl: '',
   });
   const [isLoading, setIsLoading] = useState(false);
+
+  // Helper function to convert plain text to HTML
+  const plainTextToHtml = (text) => {
+    const reviewLink = locationDetails?.reviewLink || '#'; // Get the review link from locationDetails
+    const employeeName = locationDetails?.employeeName || 'our team'; // Get the employee name
+    const businessNumber = locationDetails?.businessNumber || ''; // Get the business phone number
+
+    return `
+      <html>
+        <head>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              line-height: 1.6;
+              color: #333;
+            }
+            .invoice-container {
+              max-width: 600px;
+              margin: 0 auto;
+              padding: 20px;
+              border: 1px solid #ddd;
+              border-radius: 8px;
+              background-color: #f9f9f9;
+            }
+            .invoice-header {
+              font-size: 24px;
+              font-weight: bold;
+              color: #2c3e50;
+              margin-bottom: 20px;
+            }
+            .invoice-details {
+              margin-bottom: 20px;
+            }
+            .invoice-details p {
+              margin: 5px 0;
+            }
+            .invoice-details strong {
+              color: #2c3e50;
+            }
+            .invoice-footer {
+              margin-top: 20px;
+              font-size: 14px;
+              color: #777;
+              text-align: center;
+            }
+            .review-link {
+              color: #1a73e8;
+              text-decoration: none;
+            }
+            .review-link:hover {
+              text-decoration: underline;
+            }
+            .contact-info {
+              margin-top: 10px;
+              font-size: 14px;
+              color: #555;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="invoice-container">
+            <div class="invoice-header">Invoice Details</div>
+            <div class="invoice-details">
+              ${text
+                .split('\n')
+                .map(line => `<p>${line}</p>`)
+                .join('')}
+            </div>
+            <div class="invoice-footer">
+              Thank you for your business!<br>
+              If you have any questions, feel free to reply to this email.<br><br>
+              <a href="${reviewLink}" class="review-link">Your review means the world to us. Please consider leaving one here.</a>
+              <div class="contact-info">
+                ${employeeName}<br>
+                ${businessNumber}
+              </div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+  };
 
   useEffect(() => {
     const storedLocationDetails = sessionStorage.getItem('locationDetails');
     if (storedLocationDetails) {
       const parsedDetails = JSON.parse(storedLocationDetails);
       setLocationDetails(parsedDetails);
-      
-      const invoiceMessage = invoiceDetails ? `
-        Please find your invoice details below:\n\n
-        ${invoiceDetails.description.replace(/  +/g, '\n')}\n\n
-        Amount Charged: $${parseFloat(invoiceDetails.amount).toFixed(2)}\n\n
-        Thank you for your business!
-      ` : '';
+
+      // Generate the plain text invoice message if invoiceDetails is provided
+      const plainTextMessage = invoiceDetails
+        ? `
+          ${invoiceDetails.description.replace(/  +/g, '\n')}
+
+          Amount Charged: $${parseFloat(invoiceDetails.amount).toFixed(2)}
+          ${invoiceDetails.cardDetails
+            ? `Payment Method: ${invoiceDetails.cardDetails.brand} ending in ****${invoiceDetails.cardDetails.last4}`
+            : ''}
+        `
+        : '';
 
       setFormData(prev => ({
         ...prev,
         fromName: parsedDetails.employeeName || '',
         fromEmail: parsedDetails.employeeEmail || '',
         to: clientEmail || '',
-        subject: invoiceDetails ? `Invoice for $${parseFloat(invoiceDetails.amount).toFixed(2)}` : '',
-        message: invoiceMessage
+        subject: invoiceDetails ? `Your Detail Invoice for $${parseFloat(invoiceDetails.amount).toFixed(2)}` : '',
+        message: plainTextMessage.trim(), // Plain text for editing
       }));
     }
   }, [clientEmail, invoiceDetails, clientName]);
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
     try {
+      // Convert the plain text message to HTML
+      const htmlMessage = plainTextToHtml(formData.message);
+
       const response = await fetch(
         'https://us-central1-detail-on-the-go-universal.cloudfunctions.net/email-alias-2',
         {
@@ -53,7 +147,8 @@ export default function EmailPopup({ isOpen, onClose, clientEmail, clientName, i
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...formData,
-            subject: clientName ? `${formData.subject} - ${clientName}` : formData.subject
+            subject: clientName ? `${formData.subject} ` : formData.subject,
+            message: htmlMessage, // Send the HTML message
           }),
         }
       );
@@ -78,7 +173,7 @@ export default function EmailPopup({ isOpen, onClose, clientEmail, clientName, i
           &times;
         </button>
         <h1 className="text-2xl font-bold text-center text-blue-600 mb-6">
-          Email {clientName || 'Client'}
+          {invoiceDetails ? 'Send Invoice' : 'Email Client'}
         </h1>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -91,9 +186,8 @@ export default function EmailPopup({ isOpen, onClose, clientEmail, clientName, i
               type="text"
               name="fromName"
               value={formData.fromName}
-              onChange={handleChange}
-              required
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+              readOnly // Disable editing
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-gray-100 cursor-not-allowed"
             />
           </div>
           <div>
@@ -105,9 +199,8 @@ export default function EmailPopup({ isOpen, onClose, clientEmail, clientName, i
               type="email"
               name="fromEmail"
               value={formData.fromEmail}
-              onChange={handleChange}
-              required
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+              readOnly // Disable editing
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-gray-100 cursor-not-allowed"
             />
           </div>
           <div>

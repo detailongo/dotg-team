@@ -91,6 +91,7 @@ export default function MessengerPopup({ isOpen, onClose, businessNumber, client
       // Step 3: Prepare client information to log
       const clientData = {
         timestamp: now.toLocaleString(), // Use the same timestamp as the message
+        branch:"branch",
         businessNumber: businessNumber,
         name: clientInfo.name,
         phone: clientInfo.phone,

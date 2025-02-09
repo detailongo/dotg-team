@@ -1,88 +1,181 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { onAuthStateChangedListener } from '../../auth';
 
-export default function EmailPopup({ isOpen, onClose, user: initialUser }) {
-  const [user, setUser] = useState(initialUser || null);
+export default function EmailPopup({ isOpen, onClose, clientEmail, clientName, invoiceDetails }) {
+  const [locationDetails, setLocationDetails] = useState(null);
   const [formData, setFormData] = useState({
     fromName: '',
     fromEmail: '',
     to: '',
     subject: '',
-    message: '',
+    message: '', // Plain text for editing
     photoUrl: '',
   });
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    if (!initialUser) {
-      const unsubscribe = onAuthStateChangedListener(setUser);
-      return () => unsubscribe();
-    }
-  }, [initialUser]);
+  // Helper function to convert plain text to HTML
+  const plainTextToHtml = (text) => {
+    const reviewLink = locationDetails?.reviewLink || '#'; // Get the review link from locationDetails
+    const employeeName = locationDetails?.employeeName || 'our team'; // Get the employee name
+    const businessNumber = locationDetails?.businessNumber || ''; // Get the business phone number
 
-  useEffect(() => {
-    if (user) {
-      setFormData((prev) => ({
-        ...prev,
-        fromName: user.displayName || '',
-        fromEmail: user.email || '',
-      }));
-    }
-  }, [user]);
-
-  if (!isOpen || !user) return null;
-
-
-  // Handle form field changes
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    return `
+      <html>
+        <head>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              line-height: 1.6;
+              color: #333;
+            }
+            .invoice-container {
+              max-width: 600px;
+              margin: 0 auto;
+              padding: 20px;
+              border: 1px solid #ddd;
+              border-radius: 8px;
+              background-color: #f9f9f9;
+            }
+            .invoice-header {
+              font-size: 24px;
+              font-weight: bold;
+              color: #2c3e50;
+              margin-bottom: 20px;
+            }
+            .invoice-details {
+              margin-bottom: 20px;
+            }
+            .invoice-details p {
+              margin: 5px 0;
+            }
+            .invoice-details strong {
+              color: #2c3e50;
+            }
+            .invoice-footer {
+              margin-top: 20px;
+              font-size: 14px;
+              color: #777;
+              text-align: center;
+            }
+            .review-link {
+              color: #1a73e8;
+              text-decoration: none;
+            }
+            .review-link:hover {
+              text-decoration: underline;
+            }
+            .contact-info {
+              margin-top: 10px;
+              font-size: 14px;
+              color: #555;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="invoice-container">
+            <div class="invoice-header">Invoice Details</div>
+            <div class="invoice-details">
+              ${text
+        .split('\n')
+        .map(line => `<p>${line}</p>`)
+        .join('')}
+            </div>
+            <div class="invoice-footer">
+              Thank you for your business!<br>
+              If you have any questions, feel free to reply to this email.<br><br>
+              <a href="${reviewLink}" class="review-link">Your review means the world to us. Please consider leaving one here.</a>
+              <div class="contact-info">
+                ${employeeName}<br>
+                ${businessNumber}
+              </div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
   };
 
-  // Handle form submission
+  useEffect(() => {
+    const storedLocationDetails = sessionStorage.getItem('locationDetails');
+    if (storedLocationDetails) {
+      const parsedDetails = JSON.parse(storedLocationDetails);
+      setLocationDetails(parsedDetails);
+
+      // Generate the plain text invoice message if invoiceDetails is provided
+      const plainTextMessage = invoiceDetails
+        ? `
+          ${invoiceDetails.description.replace(/  +/g, '\n')}
+
+          Amount Charged: $${parseFloat(invoiceDetails.amount).toFixed(2)}
+          ${invoiceDetails.cardDetails
+          ? `Payment Method: ${invoiceDetails.cardDetails.brand} ending in ****${invoiceDetails.cardDetails.last4}`
+          : ''}
+        `
+        : '';
+
+      setFormData(prev => ({
+        ...prev,
+        fromName: parsedDetails.employeeName || '',
+        fromEmail: parsedDetails.employeeEmail || '',
+        to: clientEmail || '',
+        subject: invoiceDetails ? `Your Detail Invoice for $${parseFloat(invoiceDetails.amount).toFixed(2)}` : '',
+        message: plainTextMessage.trim(), // Plain text for editing
+      }));
+    }
+  }, [clientEmail, invoiceDetails, clientName]);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
     try {
+      // Convert the plain text message to HTML
+      const htmlMessage = plainTextToHtml(formData.message);
+
       const response = await fetch(
         'https://us-central1-detail-on-the-go-universal.cloudfunctions.net/email-alias-2',
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(formData),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...formData,
+            subject: clientName ? `${formData.subject} ` : formData.subject,
+            message: htmlMessage, // Send the HTML message
+          }),
         }
       );
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        alert('Error: ' + errorData.error);
-      } else {
-        const responseData = await response.json();
-        alert(responseData.message); // Show success message
-      }
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      alert(result.message);
+      onClose();
     } catch (error) {
-      console.error('Error:', error);
-      alert('Error sending email: ' + error.message);
+      alert(`Error: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
   };
 
+  if (!isOpen || !locationDetails) return null;
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-      {/* Modal Content */}
       <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-lg relative">
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 text-xl"
-        >
+        <button onClick={onClose} className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 text-xl">
           &times;
         </button>
-        <h1 className="text-2xl font-bold text-center text-blue-600 mb-6">Send an Email</h1>
+        <h1 className="text-2xl font-bold text-center text-blue-600 mb-6">
+          Email {clientName || 'Client'}
+        </h1>
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="fromName" className="block text-sm font-medium text-gray-700">
@@ -92,11 +185,9 @@ export default function EmailPopup({ isOpen, onClose, user: initialUser }) {
               id="fromName"
               type="text"
               name="fromName"
-              placeholder="Your Name"
               value={formData.fromName}
-              onChange={handleChange}
-              required
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+              readOnly // Disable editing
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-gray-100 cursor-not-allowed"
             />
           </div>
           <div>
@@ -107,11 +198,9 @@ export default function EmailPopup({ isOpen, onClose, user: initialUser }) {
               id="fromEmail"
               type="email"
               name="fromEmail"
-              placeholder="your.email@example.com"
               value={formData.fromEmail}
-              onChange={handleChange}
-              required
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+              readOnly // Disable editing
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-gray-100 cursor-not-allowed"
             />
           </div>
           <div>
@@ -122,7 +211,6 @@ export default function EmailPopup({ isOpen, onClose, user: initialUser }) {
               id="to"
               type="email"
               name="to"
-              placeholder="recipient@example.com"
               value={formData.to}
               onChange={handleChange}
               required
@@ -137,7 +225,6 @@ export default function EmailPopup({ isOpen, onClose, user: initialUser }) {
               id="subject"
               type="text"
               name="subject"
-              placeholder="Email Subject"
               value={formData.subject}
               onChange={handleChange}
               required
@@ -151,26 +238,11 @@ export default function EmailPopup({ isOpen, onClose, user: initialUser }) {
             <textarea
               id="message"
               name="message"
-              placeholder="Write your message here..."
               value={formData.message}
               onChange={handleChange}
               required
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 h-32"
             ></textarea>
-          </div>
-          <div>
-            <label htmlFor="photoUrl" className="block text-sm font-medium text-gray-700">
-              Photo URL (Optional)
-            </label>
-            <input
-              id="photoUrl"
-              type="url"
-              name="photoUrl"
-              placeholder="https://example.com/photo.jpg"
-              value={formData.photoUrl}
-              onChange={handleChange}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
-            />
           </div>
           <button
             type="submit"

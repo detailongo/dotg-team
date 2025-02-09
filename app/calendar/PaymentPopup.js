@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import AddCard from './AddCard'; // Make sure the file name matches
 
 const PaymentPopup = ({ branch, onClose, businessNumber, clientName, clientNumber, stripeCustomerId, selectedEvent, onPaymentSuccess }) => {
-  console.log(branch,"##", clientName, "##",clientNumber, "##",)
+  console.log(branch, "##", clientName, "##", clientNumber, "##",)
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [isFetching, setIsFetching] = useState(false);
   const [amount, setAmount] = useState('');
@@ -13,8 +13,9 @@ const PaymentPopup = ({ branch, onClose, businessNumber, clientName, clientNumbe
   const [description, setDescription] = useState('');
   const [autoSendInvoice, setAutoSendInvoice] = useState(true);
   const [showAddCardPopup, setShowAddCardPopup] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false); // New state for processing payment
 
-  const chargeCustomer = async (branch, customerId, paymentMethodId, amount, description, zipCode, businessNumber,clientName,clientNumber) => { // 👈 Add branch, businessNumber, clientInfo as parameters
+  const chargeCustomer = async (branch, customerId, paymentMethodId, amount, description, zipCode, businessNumber, clientName, clientNumber) => { // 👈 Add branch, businessNumber, clientInfo as parameters
     try {
       // 1. Process payment first
       const response = await fetch(
@@ -36,38 +37,12 @@ const PaymentPopup = ({ branch, onClose, businessNumber, clientName, clientNumbe
       const data = await response.json();
       if (!response.ok) throw new Error(data.error?.message || data.error);
 
-      // 2. Only run this if payment succeeded
-      const now = new Date(); // 👈 Define timestamp
-      const clientData = {
-        timestamp: now.toLocaleString(),
-        businessNumber: businessNumber,
-        name: clientName,
-        phone: clientNumber,
-        message: "Card Payment Collected: "+ amount,
-      };
-
-      const sheetsResponse = await fetch(
-        'https://us-central1-detail-on-the-go-universal.cloudfunctions.net/detail-sms-timing',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(clientData),
-        }
-      );
-
-      if (!sheetsResponse.ok) {
-        console.error('Failed to send client data to backend');
-      } else {
-        console.log('Client data successfully sent to backend');
-      }
-
       return data; // Return Stripe response
 
     } catch (error) {
       throw new Error(`Charge failed: ${error.message}`);
     }
   };
-
 
   const handleCardSelect = (e) => {
     const value = e.target.value;
@@ -76,26 +51,42 @@ const PaymentPopup = ({ branch, onClose, businessNumber, clientName, clientNumbe
       setSelectedCard('');
     } else {
       setSelectedCard(value);
+      // Find the selected payment method
+      const selectedPaymentMethod = paymentMethods.find(pm => pm.id === value);
+      if (selectedPaymentMethod) {
+        // Update the description with the card's last 4 digits
+        const last4Digits = selectedPaymentMethod.card.last4;
+        const updatedDescription = generateDescription(selectedEvent, last4Digits);
+        setDescription(updatedDescription);
+      }
     }
   };
 
   const extractEmail = (desc) => desc.match(/Email:\s*([^\s]+@[^\s]+)/i)?.[1] || null;
 
-  const generateDescription = (event) => {
+  const generateDescription = (event, last4Digits = '') => {
     const vehicle = event.description.match(/Vehicle:\s*\(([^)]+)\)/)?.[1] || 'Unknown';
-    const pkg = event.description.match(/Package:\s*(.+?)(<br>|$)/)?.[1]?.trim() || 'Unknown';
-    const plan = event.description.match(/Plan:\s*(.+?)(<br>|$)/)?.[1]?.trim() || 'Unknown';
+    const pkg = event.description.match(/Package:\s*(.+?)(\n|$)/)?.[1]?.trim() || 'Unknown';
+    const plan = event.description.match(/Plan:\s*(.+?)(\n|$)/)?.[1]?.trim() || 'Unknown';
+
     const services = parseFloat(event.description.match(/Services:\s*\$(\d+\.?\d*)/)?.[1] || 0);
     const tax = parseFloat(event.description.match(/Sales Tax:\s*\$(\d+\.?\d*)/)?.[1] || 0);
     const total = services + tax;
 
-    return `Vehicle: ${vehicle}
+    let desc = `Vehicle: ${vehicle}
 Package: ${pkg}
 Plan: ${plan}
 Services: $${services.toFixed(2)}
 Tax: $${tax.toFixed(2)}
 Total: $${total.toFixed(2)}
 Location: ${event.location || 'Unknown'}`;
+
+    // Add the payment method line if last4Digits is provided
+    if (last4Digits) {
+      desc += `\nPayment Method: Card ending in ****${last4Digits}`;
+    }
+
+    return desc;
   };
 
   const fetchMethods = useCallback(async () => {
@@ -120,85 +111,135 @@ Location: ${event.location || 'Unknown'}`;
   }, [fetchMethods]);
 
   useEffect(() => {
-    if (selectedEvent) setDescription(generateDescription(selectedEvent));
-  }, [selectedEvent]);
+    if (selectedEvent) {
+      const selectedPaymentMethod = paymentMethods.find(pm => pm.id === selectedCard);
+      const last4Digits = selectedPaymentMethod ? selectedPaymentMethod.card.last4 : '';
+      const updatedDescription = generateDescription(selectedEvent, last4Digits);
+      setDescription(updatedDescription);
+    }
+  }, [selectedEvent, selectedCard, paymentMethods]);
 
   const handlePayment = async () => {
     if (!amount || amount <= 0) return alert('Invalid amount');
     if (!paymentMethod) return alert('Select payment method');
     if (paymentMethod === 'card' && !selectedCard) return alert('Select card');
 
+    setIsProcessing(true); // Disable the button and show loading
+
     try {
-      console.log(branch,"#",
-        stripeCustomerId,"#",
-        selectedCard,"#",
-        parseFloat(amount),"#",
-        description,"#",
-        businessNumber,"#",
-        clientName,"#",
-        clientNumber)
-      const result = await chargeCustomer(
-        branch,
-        stripeCustomerId,
-        selectedCard,
-        parseFloat(amount),
-        description,
-        businessNumber,
-        clientName,
-        clientNumber
-      );
+      let updatedDescription = description;
+      let paymentType = '';
 
-      alert('Payment successful!');
+      // Handle card payments
+      if (paymentMethod === 'card') {
+        const selectedPaymentMethod = paymentMethods.find(pm => pm.id === selectedCard);
+        const last4Digits = selectedPaymentMethod ? selectedPaymentMethod.card.last4 : '';
+        updatedDescription = generateDescription(selectedEvent, last4Digits);
+        paymentType = `Card ending in ****${last4Digits}`;
 
-      const clientData = {
-        timestamp: new Date().toLocaleString(), // Use the same timestamp as the message
+        // Process card payment via Stripe
+        const result = await chargeCustomer(
+          branch,
+          stripeCustomerId,
+          selectedCard,
+          parseFloat(amount),
+          updatedDescription,
+          businessNumber,
+          clientName,
+          clientNumber
+        );
+      } else {
+        // Handle cash or check payments
+        paymentType = paymentMethod === 'cash' ? 'Cash' : 'Check';
+        updatedDescription = `${description}\nPayment Method: ${paymentType}`;
+      }
+
+      // Extract email and event start time
+      const email = extractEmail(selectedEvent.description);
+      const eventStartTime = selectedEvent.start || 'Unknown'; // Assuming selectedEvent has a 'start' property
+
+      // Prepare data for Google Sheets
+      const paymentData = {
+        timestamp: new Date().toLocaleString(),
+        eventStartTime: eventStartTime, // Add event start time
+        location: branch,
         businessNumber: businessNumber,
-        name: clientName,
-        phone: clientNumber,
-        message: "Payment Collected",
+        clientName: clientName,
+        email: email, // Add email
+        clientNumber: clientNumber,
+        amount: parseFloat(amount),
+        paymentMethod: paymentType,
+        description: updatedDescription,
+        email: email, // Add email
 
       };
 
+      // Submit payment data to Google Sheets
       const sheetsResponse = await fetch(
-        'https://us-central1-detail-on-the-go-universal.cloudfunctions.net/detail-sms-timing',
+        'https://us-central1-detail-on-the-go-universal.cloudfunctions.net/payment-collected',
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(clientData), // Send client data as JSON
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(paymentData),
         }
       );
 
       if (!sheetsResponse.ok) {
-        console.error('Failed to send client data to backend');
+        console.error('Failed to send payment data to Google Sheets');
+        throw new Error('Failed to log payment in Google Sheets');
       } else {
-        console.log('Client data successfully sent to backend');
+        console.log('Payment data successfully sent to Google Sheets');
       }
 
+      // Prepare data for Google Sheets
+      const timeData = {
+        timestamp: new Date().toLocaleString(),
+        location: branch,
+        businessNumber: businessNumber,
+        clientName: clientName,
+        clientNumber: clientNumber,
+        paymentMethod: "Payment collected: " + paymentType,
+      };
+
+      // Submit payment data to Google Sheets
+      const sheetsResponse2 = await fetch(
+        'https://us-central1-detail-on-the-go-universal.cloudfunctions.net/detail-sms-timing',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(timeData),
+        }
+      );
+
+      if (!sheetsResponse2.ok) {
+        console.error('Failed to send time data to Google Sheets');
+        throw new Error('Failed to log time in Google Sheets');
+      } else {
+        console.log('time data successfully sent to Google Sheets');
+      }
+
+      alert('Payment successful!');
 
       if (autoSendInvoice && onPaymentSuccess) {
         onPaymentSuccess({
           amount: parseFloat(amount),
-          description,
-          customerEmail: extractEmail(selectedEvent.description),
+          description: updatedDescription,
+          customerEmail: email,
         });
       }
 
       onClose();
     } catch (error) {
       alert(error.message);
+    } finally {
+      setIsProcessing(false); // Re-enable the button
     }
   };
 
   return (
     <>
       <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex justify-center items-center z-50">
-        {/* 
-          Add 'relative' so we can position the top-right close (X) button with absolute 
-        */}
         <div className="relative bg-white p-6 rounded-lg w-[90%] shadow-lg max-h-[80vh] overflow-y-auto">
-          {/* Top-right close button */}
           <button
             onClick={onClose}
             className="absolute top-3 right-3 text-gray-500 hover:text-gray-700 focus:outline-none"
@@ -280,9 +321,10 @@ Location: ${event.location || 'Unknown'}`;
               <div className="flex gap-4">
                 <button
                   onClick={handlePayment}
-                  className="flex-1 bg-blue-500 text-white py-2 rounded hover:bg-blue-600"
+                  disabled={isProcessing}
+                  className="flex-1 bg-blue-500 text-white py-2 rounded hover:bg-blue-600 disabled:bg-blue-300"
                 >
-                  Confirm Payment
+                  {isProcessing ? 'Processing...' : 'Confirm Payment'}
                 </button>
                 <button
                   onClick={onClose}
