@@ -7,6 +7,7 @@ import React, { lazy, Suspense } from 'react';
 const PaymentPopup = lazy(() => import('./PaymentPopup'));
 const MessengerPopup = lazy(() => import('../sms/sms-pop'));
 const EmailPopup = lazy(() => import('../email/email-popup'));
+const EditEventPopup = lazy(() => import('./EditEventPopup'));
 
 const CalendarPage = () => {
   const [events, setEvents] = useState([]);
@@ -24,6 +25,16 @@ const CalendarPage = () => {
   const [businessNumber, setBusinessNumber] = useState('');
   const [branch, setBranch] = useState('');
   const [invoiceDetails, setInvoiceDetails] = useState(null);
+  const [isEditPopupVisible, setIsEditPopupVisible] = useState(false);
+  const getCurrentUser = () => {
+    return new Promise((resolve) => {
+      const unsubscribe = onAuthStateChangedListener((user) => {
+        unsubscribe();
+        resolve(user);
+      });
+    });
+  };
+
 
   useEffect(() => {
     const storedLocationDetails = sessionStorage.getItem('locationDetails');
@@ -143,7 +154,7 @@ const CalendarPage = () => {
     setClientName(event.title);
     setSelectedEvent(event);
     setIsPopupVisible(true);
-    
+
   };
 
   const closePopup = () => {
@@ -172,8 +183,8 @@ const CalendarPage = () => {
     console.log("Test" + selectedEvent.title)
     return match?.[1]?.trim() || null;
   };
-  
-  
+
+
   const handleSmsClick = () => {
     const storedDetails = sessionStorage.getItem('locationDetails');
     if (!storedDetails) return alert('Business configuration missing');
@@ -185,10 +196,10 @@ const CalendarPage = () => {
     const phone = extractFromDescription(/Phone(?: Number)?:\s*([+\d\s\-()]+)/i);
     if (!phone) return alert('No client phone found');
 
-    
+
     const normalizedPhone = normalizePhoneNumber(phone);
     if (!normalizedPhone) return alert('Invalid phone format');
-    console.log("normalizedPhone: "+ normalizedPhone)
+    console.log("normalizedPhone: " + normalizedPhone)
     console.log("Name; " + clientName)
     setBusinessNumber(businessPhone);
     setClientPhone(normalizedPhone);
@@ -203,7 +214,7 @@ const CalendarPage = () => {
     const phoneNumber = extractFromDescription(/Phone Number:\s*(\d+)/i);
     if (email) {
       setClientEmail(email);
-      
+
       setIsEmailPopupVisible(true);
     } else {
       alert('No client email found');
@@ -439,6 +450,12 @@ const CalendarPage = () => {
 
               <div className="mt-4 space-y-2">
                 <button
+                  onClick={() => setIsEditPopupVisible(true)}
+                  className="w-full bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600"
+                >
+                  Edit Event
+                </button>
+                <button
                   onClick={() => {
                     const stripped = selectedEvent.description.replace(
                       /<[^>]+>/g,
@@ -473,7 +490,81 @@ const CalendarPage = () => {
           </div>
         )}
 
+        {isEditPopupVisible && (
+          <Suspense fallback={<div>Loading editor...</div>}>
+            <EditEventPopup
+              event={selectedEvent}
+              onClose={() => setIsEditPopupVisible(false)}
+              onSave={async (updatedEvent) => {
+                try {
+                  const user = await getCurrentUser();
 
+                  // Convert datetime-local format to ISO with timezone
+                  const toRFC3339 = (datetime) => {
+                    const date = new Date(datetime);
+                    const offset = -date.getTimezoneOffset();
+                    const pad = (n) => String(n).padStart(2, "0");
+                    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+                      `T${pad(date.getHours())}:${pad(date.getMinutes())}:00` +
+                      `${offset >= 0 ? "+" : "-"}${pad(Math.abs(offset) / 60)}:${pad(Math.abs(offset) % 60)}`;
+                  };
+
+                  const requestBody = {
+                    eventId: updatedEvent.id,
+                    summary: updatedEvent.title,
+                    start: toRFC3339(updatedEvent.start),
+                    end: toRFC3339(updatedEvent.end),
+                    description: updatedEvent.description,
+                    location: updatedEvent.location,
+                    recurrence: updatedEvent.recurrence,
+                    timeZone: updatedEvent.timeZone, // ✅ Use the selected timezone
+
+                  };
+
+                  // **LOGGING DATA BEFORE SENDING**
+                  console.log("Data being sent to backend:", requestBody);
+
+                  const response = await fetch(
+                    `https://us-central1-dotg-d6313.cloudfunctions.net/universal-modify-event?email=${user.email}`,
+                    {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(requestBody),
+                    }
+                  );
+
+                  if (!response.ok) throw new Error("Failed to update event");
+
+                  // Update main events list
+                  setEvents(events.map(e => e.id === updatedEvent.id ? {
+                    ...e,
+                    ...updatedEvent,
+                    start: new Date(updatedEvent.start),
+                    end: updatedEvent.end ? new Date(updatedEvent.end) : null
+                  } : e));
+
+                  // Update selected event if it's the same one
+                  setSelectedEvent(prev => {
+                    if (prev?.id === updatedEvent.id) {
+                      return {
+                        ...prev,
+                        ...updatedEvent,
+                        start: new Date(updatedEvent.start),
+                        end: updatedEvent.end ? new Date(updatedEvent.end) : null
+                      };
+                    }
+                    return prev;
+                  });
+
+                  setIsEditPopupVisible(false);
+                } catch (error) {
+                  console.error("Error updating event:", error);
+                  alert(`Failed to update event: ${error.message}`);
+                }
+              }}
+            />
+          </Suspense>
+        )}
         {isPaymentPopupVisible && (
           <Suspense fallback={<div>Loading payment...</div>}>
             <PaymentPopup
