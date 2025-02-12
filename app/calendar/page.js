@@ -457,17 +457,14 @@ const CalendarPage = () => {
                 </button>
                 <button
                   onClick={() => {
-                    const stripped = selectedEvent.description.replace(
-                      /<[^>]+>/g,
-                      ' '
-                    );
+                    const stripped = selectedEvent.description.replace(/<[^>]+>/g, ' ');
                     const match = stripped.match(/Stripe:\s*(cus_[a-zA-Z0-9]+)/);
+
                     if (match?.[1]) {
                       setStripeCustomerId(match[1].trim());
-                      setIsPaymentPopupVisible(true);
-                    } else {
-                      alert('No Stripe Customer ID found');
                     }
+
+                    setIsPaymentPopupVisible(true); // Always open the payment page
                   }}
                   className="w-full bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
                 >

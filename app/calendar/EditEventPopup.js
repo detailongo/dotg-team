@@ -48,7 +48,7 @@ const EditEventPopup = ({ event, onClose, onSave }) => {
     end: '',
     location: '',
     description: '',
-    timeZone: '', // NEW: Added timeZone field
+    timeZone: '',
     recurrencePreset: 'none',
     customInterval: 1,
     customUnit: 'days',
@@ -58,9 +58,10 @@ const EditEventPopup = ({ event, onClose, onSave }) => {
     customOccurrences: 1,
   });
 
+  const [isSaving, setIsSaving] = useState(false);
+
   useEffect(() => {
     if (event) {
-      // Convert dates to local datetime format
       const toLocalDateTime = (date) => {
         if (!date) return '';
         const d = new Date(date);
@@ -75,8 +76,8 @@ const EditEventPopup = ({ event, onClose, onSave }) => {
         end: toLocalDateTime(event.end),
         location: event.location || '',
         description: event.description || '',
-        timeZone: event.timeZone || timeZones[0], // AUTO-SELECT the original timezone or default
-        recurrencePreset: 'none', // Temporary, needs proper parsing
+        timeZone: event.timeZone || timeZones[0],
+        recurrencePreset: 'none',
         customInterval: 1,
         customUnit: 'days',
         customDays: [],
@@ -87,17 +88,15 @@ const EditEventPopup = ({ event, onClose, onSave }) => {
     }
   }, [event]);
 
-  // Fixed generateRecurrence function
   const generateRecurrence = () => {
     const ruleOptions = getRuleOptions();
-    if (!ruleOptions.freq) return ''; // No recurrence
+    if (!ruleOptions.freq) return '';
 
     try {
       const rule = new RRule({
         ...ruleOptions,
-        dtstart: new Date(formState.start) // Set DTSTART from event
+        dtstart: new Date(formState.start),
       });
-
       return rule.toString().replace('RRULE:', '');
     } catch (error) {
       console.error('Error generating recurrence rule:', error);
@@ -105,33 +104,34 @@ const EditEventPopup = ({ event, onClose, onSave }) => {
     }
   };
 
-  // Proper handleSubmit implementation
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-  
-    // Validate start/end times
+
     if (new Date(formState.start) >= new Date(formState.end)) {
       alert('End time must be after start time');
       return;
     }
-  
+
     const ruleString = generateRecurrence();
-  
-    // Build the payload to send
+
     const dataToSend = {
       ...formState,
       recurrence: ruleString ? [`RRULE:${ruleString}`] : [],
       id: event.id,
-      timeZone: formState.timeZone  // should be "America/Chicago" or another valid value
+      timeZone: formState.timeZone,
     };
-  
-    console.log("Data being sent to backend:", dataToSend);
-    onSave(dataToSend);
-  };
-  
-  
 
-  // Add missing getRuleOptions implementation
+    try {
+      setIsSaving(true);
+      await onSave(dataToSend);
+    } catch (error) {
+      console.error('Error saving event:', error);
+      alert('Failed to edit');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const getRuleOptions = () => {
     const startDate = new Date(formState.start);
 
@@ -143,7 +143,7 @@ const EditEventPopup = ({ event, onClose, onSave }) => {
         return {
           freq: RRule.WEEKLY,
           interval: 1,
-          byweekday: [RRule[['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'][startDate.getDay()]]]
+          byweekday: [RRule[['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'][startDate.getDay()]]],
         };
 
       case 'monthly':
@@ -151,7 +151,7 @@ const EditEventPopup = ({ event, onClose, onSave }) => {
           freq: RRule.MONTHLY,
           interval: 1,
           byweekday: [RRule[['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'][startDate.getDay()]]
-            .nth(getWeekdayOccurrence(startDate))]
+            .nth(getWeekdayOccurrence(startDate))],
         };
 
       case 'yearly':
@@ -159,33 +159,32 @@ const EditEventPopup = ({ event, onClose, onSave }) => {
           freq: RRule.YEARLY,
           interval: 1,
           bymonth: startDate.getMonth() + 1,
-          bymonthday: startDate.getDate()
+          bymonthday: startDate.getDate(),
         };
 
       case 'weekday':
         return {
           freq: RRule.WEEKLY,
           interval: 1,
-          byweekday: [RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR]
+          byweekday: [RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR],
         };
 
       case 'custom':
         const rule = {
           freq: RRule[formState.customUnit.toUpperCase()],
-          interval: formState.customInterval
+          interval: formState.customInterval,
         };
 
         if (formState.customUnit === 'weeks') {
-          // Get weekday from start date as fallback
-          const startDay = startDate ?
-            ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'][startDate.getDay()] :
-            'MO';
+          const startDay = startDate
+            ? ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'][startDate.getDay()]
+            : 'MO';
 
           rule.byweekday = formState.customDays?.length > 0
             ? formState.customDays.map(day =>
               RRule[day.substring(0, 2).toUpperCase()]
             )
-            : [RRule[startDay]]; // Fallback to start day
+            : [RRule[startDay]];
         }
 
         if (formState.customEndType === 'date') {
@@ -196,7 +195,7 @@ const EditEventPopup = ({ event, onClose, onSave }) => {
 
         return rule;
 
-      default: // 'none'
+      default:
         return {};
     }
   };
@@ -205,8 +204,25 @@ const EditEventPopup = ({ event, onClose, onSave }) => {
   const eventDayName = startDate?.toLocaleDateString('en-US', { weekday: 'long' }) || '';
   const eventMonthName = startDate?.toLocaleDateString('en-US', { month: 'long' }) || '';
   const eventMonthDay = startDate?.getDate() || '';
-  const ordinal = startDate ?
-    `${getWeekdayOccurrence(startDate)}${getOrdinalSuffix(getWeekdayOccurrence(startDate))}` : '';
+  const ordinal = startDate
+    ? `${getWeekdayOccurrence(startDate)}${getOrdinalSuffix(getWeekdayOccurrence(startDate))}`
+    : '';
+
+  // When a new start date is selected, update the end date to have the same day (but keep its original time)
+  const handleStartChange = (e) => {
+    const newStart = e.target.value;
+    let newEnd = formState.end;
+    if (newStart && formState.end) {
+      const newDatePart = newStart.split('T')[0];
+      const endTimePart = formState.end.split('T')[1] || '';
+      newEnd = `${newDatePart}T${endTimePart}`;
+    }
+    setFormState({
+      ...formState,
+      start: newStart,
+      end: newEnd,
+    });
+  };
 
   return (
     <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex justify-center items-center z-50">
@@ -229,7 +245,7 @@ const EditEventPopup = ({ event, onClose, onSave }) => {
             <input
               type="datetime-local"
               value={formState.start}
-              onChange={(e) => setFormState({ ...formState, start: e.target.value })}
+              onChange={handleStartChange}
               className="w-full p-2 border rounded"
             />
           </div>
@@ -292,7 +308,6 @@ const EditEventPopup = ({ event, onClose, onSave }) => {
             </select>
             {formState.recurrencePreset === 'custom' && (
               <div className="mt-4 space-y-4">
-                {/* Repeat every */}
                 <div className="flex items-center gap-2">
                   <span>Repeat every</span>
                   <input
@@ -317,7 +332,6 @@ const EditEventPopup = ({ event, onClose, onSave }) => {
                     <option value="years">year(s)</option>
                   </select>
                 </div>
-                {/* Repeat on (only shown if unit is weeks) */}
                 {formState.customUnit === 'weeks' && (
                   <div>
                     <label>Repeat on</label>
@@ -335,7 +349,7 @@ const EditEventPopup = ({ event, onClose, onSave }) => {
                           className={`p-2 rounded ${formState.customDays.includes(day)
                             ? 'bg-blue-500 text-white'
                             : 'bg-gray-200'
-                          }`}
+                            }`}
                         >
                           {day.substring(0, 1)}
                         </button>
@@ -343,7 +357,6 @@ const EditEventPopup = ({ event, onClose, onSave }) => {
                     </div>
                   </div>
                 )}
-                {/* Ends options */}
                 <div>
                   <label>Ends</label>
                   <div className="space-y-2 mt-1">
@@ -406,8 +419,12 @@ const EditEventPopup = ({ event, onClose, onSave }) => {
             )}
           </div>
           <div className="pt-4">
-            <button type="submit" className="p-2 bg-green-500 text-white rounded">
-              Save
+            <button
+              type="submit"
+              disabled={isSaving}
+              className={`w-full p-2 rounded text-white ${isSaving ? 'bg-gray-500 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'}`}
+            >
+              {isSaving ? 'Loading...' : 'Save'}
             </button>
           </div>
         </form>
