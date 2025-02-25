@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { onAuthStateChangedListener } from '../../auth.js'; // Adjust path to match your project structure
 
 export default function MessengerPopup({ isOpen, onClose, businessNumber, clientNumber }) {
   const [clientInfo, setClientInfo] = useState(null);
@@ -8,8 +9,23 @@ export default function MessengerPopup({ isOpen, onClose, businessNumber, client
   const [newMessage, setNewMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [delay, setDelay] = useState(0);
+  const [userFirstName, setUserFirstName] = useState(''); // State for user's first name
   const messagesEndRef = useRef(null);
 
+  // Fetch the logged-ign user's first name from Firebase Auth
+  useEffect(() => {
+    const unsubscribe = onAuthStateChangedListener((user) => {
+      if (user && user.displayName) {
+        const firstName = user.displayName.split(' ')[0];
+        setUserFirstName(firstName);
+      } else {
+        setUserFirstName('');
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Fetch conversation history
   useEffect(() => {
     if (isOpen && businessNumber && clientNumber) {
       const fetchConversation = async () => {
@@ -22,7 +38,6 @@ export default function MessengerPopup({ isOpen, onClose, businessNumber, client
 
           if (response.ok) {
             const data = await response.json();
-
             const processedMessages = (data.messages || [])
               .map((msg) => {
                 const seconds = msg.timestamp?._seconds || 0;
@@ -50,21 +65,45 @@ export default function MessengerPopup({ isOpen, onClose, businessNumber, client
     }
   }, [isOpen, businessNumber, clientNumber]);
 
+  // Scroll to the latest message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Function to fetch availability from the Cloud Function
+  const fetchAvailability = async () => {
+    try {
+      const response = await fetch(
+        `https://us-central1-detail-on-the-go-universal.cloudfunctions.net/phone-availability?to=${encodeURIComponent(
+          businessNumber
+        )}&from=${encodeURIComponent(clientNumber)}`
+      );
+      if (!response.ok) {
+        throw new Error('Failed to fetch availability');
+      }
+      const availableSlots = await response.json();
+      return availableSlots;
+    } catch (error) {
+      console.error('Error fetching availability:', error);
+      return [];
+    }
+  };
 
   const handleSendMessage = async () => {
     if (!newMessage.trim()) return;
 
     setIsLoading(true);
 
+    const signature = userFirstName ? `-${userFirstName}, Detail On The Go` : '-Detail On The Go';
+    const messageWithSignature = `${newMessage.trim()} ${signature}`;
+
     try {
-      // Step 1: Send the SMS
       const smsResponse = await fetch(
         `https://us-central1-detail-on-the-go-universal.cloudfunctions.net/sms?to=${encodeURIComponent(
           clientNumber
-        )}&from=${encodeURIComponent(businessNumber)}&message=${encodeURIComponent(newMessage)}&delay=${delay}`,
+        )}&from=${encodeURIComponent(businessNumber)}&message=${encodeURIComponent(
+          messageWithSignature
+        )}&delay=${delay}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -73,33 +112,38 @@ export default function MessengerPopup({ isOpen, onClose, businessNumber, client
 
       if (!smsResponse.ok) {
         console.error('Failed to send message');
-        return; // Stop if SMS fails
+        return;
       }
 
-      // Step 2: Update the UI with the new message
       const now = new Date();
       setMessages((prev) =>
-        [...prev, {
-          message: newMessage,
-          direction: 'outgoing',
-          timestamp: now.toLocaleString(),
-          rawTimestamp: now.getTime(),
-        }].sort((a, b) => a.rawTimestamp - b.rawTimestamp)
+        [
+          ...prev,
+          {
+            message: messageWithSignature,
+            direction: 'outgoing',
+            timestamp: now.toLocaleString(),
+            rawTimestamp: now.getTime(),
+          },
+        ].sort((a, b) => a.rawTimestamp - b.rawTimestamp)
       );
       setNewMessage('');
 
-      // Step 3: Prepare client information to log
       const clientData = {
-        timestamp: now.toLocaleString(), // Use the same timestamp as the message
-        branch:"branch",
+        timestamp: now.toLocaleString(),
+        branch: 'branch',
         businessNumber: businessNumber,
         name: clientInfo.name,
         phone: clientInfo.phone,
-        message: newMessage,
-
+        message: messageWithSignature,
       };
 
-      if (newMessage.includes("I've just arrived") || newMessage.includes("I'm headed your")|| newMessage.includes("wrapping")|| newMessage.includes("finished")) {
+      if (
+        newMessage.includes("I've just arrived") ||
+        newMessage.includes("I'm headed your") ||
+        newMessage.includes("wrapping") ||
+        newMessage.includes("finished")
+      ) {
         const sheetsResponse = await fetch(
           'https://us-central1-detail-on-the-go-universal.cloudfunctions.net/detail-sms-timing',
           {
@@ -107,7 +151,7 @@ export default function MessengerPopup({ isOpen, onClose, businessNumber, client
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify(clientData), // Send client data as JSON
+            body: JSON.stringify(clientData),
           }
         );
 
@@ -116,11 +160,7 @@ export default function MessengerPopup({ isOpen, onClose, businessNumber, client
         } else {
           console.log('Client data successfully sent to backend');
         }
-      } else {
-        console.log("")
       }
-
-
     } catch (error) {
       console.error('Error:', error);
     } finally {
@@ -145,9 +185,8 @@ export default function MessengerPopup({ isOpen, onClose, businessNumber, client
       });
   };
 
-  const applyShortcut = (shortcut) => {
+  const applyShortcut = async (shortcut) => {
     const messagesMap = {
-      getAvailability: `My next availability is: [availability]`,
       onMyWay: "I'm headed your way now.",
       arrived: "I've just arrived, and will start shortly.",
       delay:
@@ -160,7 +199,22 @@ export default function MessengerPopup({ isOpen, onClose, businessNumber, client
         "I really appreciate you using my services. It would mean a lot if you left a review here: https://g.page/r/CS98X9jMS0IREBM/review",
     };
 
-    setNewMessage(messagesMap[shortcut] || '');
+    if (shortcut === 'getAvailability') {
+      setIsLoading(true); // Show loading state while fetching
+      const availableSlots = await fetchAvailability();
+      setIsLoading(false);
+
+      if (availableSlots.length > 0) {
+        const availabilityText = `My next availability is:\n${availableSlots
+          .slice(0, 5) // Limit to 5 slots
+          .join('\n')}`;
+        setNewMessage(availabilityText);
+      } else {
+        setNewMessage('I don’t have any availability in the next 60 days.');
+      }
+    } else {
+      setNewMessage(messagesMap[shortcut] || '');
+    }
   };
 
   if (!isOpen || !clientInfo) return null;
@@ -169,11 +223,8 @@ export default function MessengerPopup({ isOpen, onClose, businessNumber, client
     <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
       <div
         className="bg-white rounded-lg shadow-lg w-full max-w-md md:max-h-[90%] h-full md:h-auto relative flex flex-col overflow-hidden"
-        style={{
-          maxHeight: '90vh',
-        }}
+        style={{ maxHeight: '90vh' }}
       >
-        {/* Header Section */}
         <div className="flex justify-between items-center p-4 border-b">
           <div>
             <h2 className="text-lg font-semibold">{clientInfo.name || 'Client'}</h2>
@@ -186,19 +237,16 @@ export default function MessengerPopup({ isOpen, onClose, businessNumber, client
             Call
           </button>
           <button onClick={onClose} className="text-gray-600 hover:text-gray-900 ml-4">
-            &times;
+            ×
           </button>
         </div>
 
-        {/* Messages Section */}
         <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
           {messages.length > 0 ? (
             messages.map((msg, index) => (
               <div
                 key={index}
-                className={`mb-4 p-3 rounded-lg shadow-sm ${msg.direction === 'outgoing'
-                  ? 'bg-blue-600 text-white ml-auto'
-                  : 'bg-white text-gray-900 border'
+                className={`mb-4 p-3 rounded-lg shadow-sm ${msg.direction === 'outgoing' ? 'bg-blue-600 text-white ml-auto' : 'bg-white text-gray-900 border'
                   }`}
               >
                 <p className="text-sm">{msg.message}</p>
@@ -211,7 +259,6 @@ export default function MessengerPopup({ isOpen, onClose, businessNumber, client
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Section */}
         <div className="sticky bottom-0 bg-white border-t p-4 space-y-2">
           <select
             onChange={(e) => applyShortcut(e.target.value)}
@@ -228,17 +275,20 @@ export default function MessengerPopup({ isOpen, onClose, businessNumber, client
             <option value="LWRReview">Leave a Review</option>
           </select>
           <div className="flex flex-wrap gap-2">
-            <input
-              type="text"
+            <textarea
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               placeholder="Type a message..."
-              className="flex-1 p-2 border rounded-md"
+              className="flex-1 p-2 border rounded-md resize-none min-h-[2.5rem] max-h-[6rem] overflow-y-auto"
+              onInput={(e) => {
+                e.target.style.height = '0px';
+                e.target.style.height = e.target.scrollHeight + 'px';
+              }}
             />
             <select
               onChange={(e) => setDelay(Number(e.target.value))}
               value={delay}
-              className="p-2 border rounded-md"
+              className="p-2 pr-8 border rounded-md min-w-[120px]"  // Added pr-8 and min-w-[120px]
             >
               <option value={0}>Send Now</option>
               <option value={1}>1 Minute</option>

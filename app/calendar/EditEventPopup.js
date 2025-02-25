@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { RRule } from 'rrule';
 
 const timeZones = [
+  "America/Chicago",
   "Pacific/Honolulu",
   "America/Anchorage",
   "America/Los_Angeles",
   "America/Denver",
-  "America/Chicago",
   "America/New_York",
   "Europe/London",
   "Europe/Paris",
