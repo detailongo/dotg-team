@@ -1,21 +1,17 @@
-# Use the latest official Node.js image
-FROM node:latest
-
-# Set the working directory
+# Stage 1: Build the app
+FROM node:20-alpine AS builder
 WORKDIR /app
-
-# Install dependencies
 COPY package.json package-lock.json ./
-RUN npm install
-
-# Copy all project files
+RUN npm install --production=false  # Ensure devDependencies are included for build
 COPY . .
-
-# Build Next.js app
 RUN npm run build
 
-# Expose port 8080
+# Stage 2: Run the app
+FROM node:20-alpine AS runner
+WORKDIR /app
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
+ENV PORT=8080
 EXPOSE 8080
-
-# Start the app
 CMD ["npm", "start"]

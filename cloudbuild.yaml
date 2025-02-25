@@ -1,0 +1,19 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/dotg/dotg:latest', '.']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'us-central1-docker.pkg.dev/$PROJECT_ID/dotg/dotg:latest']
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'dotg'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/dotg/dotg:latest'
+      - '--platform=managed'
+      - '--region=us-central1'
+      - '--allow-unauthenticated'
+      - '--set-env-vars=NEXT_PUBLIC_UPLOADTHING_APP_ID=7dzxf2x6zw,UPLOADTHING_SECRET=sk_live_51e673baa880ae4773e4d01a679a6aa073d96e12cdd9e66255f972a6bc3ba39d,UPLOADTHING_TOKEN=eyJhcGlLZXkiOiJza19saXZlXzUxZTY3M2JhYTg4MGFlNDc3M2U0ZDAxYTY3OWE2YWEwNzNkOTZlMTJjZGQ5ZTY2MjU1Zjk3MmE2YmMzYmEzOWQiLCJhcHBJZCI6IjdkenhmMng2enciLCJyZWdpb25zIjpbInNlYTEiXX0='
+
+options:
+  machineType: 'E2_HIGHCPU_8'
