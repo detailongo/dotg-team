@@ -6,7 +6,7 @@ import { signInWithGoogle, logoutUser, getUser, onAuthStateChangedListener } fro
 import { useRouter } from 'next/navigation';
 
 const NavButton = ({ href, children, className = '', onClick }) => (
-  <Link 
+  <Link
     href={href}
     onClick={onClick}
     className={`inline-flex items-center justify-center h-10 px-4 rounded-[30px] border-2 border-transparent
@@ -72,7 +72,7 @@ const Header = () => {
       if (currentUser && currentUser.email) {
         try {
           const response = await fetch(
-            `https://us-central1-detail-on-the-go-universal.cloudfunctions.net/user?email=${currentUser.email}`
+            `https://us-central1-detail-on-the-go-universal.cloudfunctions.net/user?email=${encodeURIComponent(currentUser.email)}`
           );
           if (response.ok) {
             const data = await response.json();
@@ -80,18 +80,25 @@ const Header = () => {
             setLocationDetails(data.locationDetails);
             sessionStorage.setItem('locationDetails', JSON.stringify(data.locationDetails));
           } else {
-            console.error('Failed to fetch location details');
+            console.error('Failed to fetch location details:', response.status);
+            setLocationDetails(null);
+            sessionStorage.removeItem('locationDetails');
           }
         } catch (error) {
           console.error('Error fetching location details:', error);
+          setLocationDetails(null);
+          sessionStorage.removeItem('locationDetails');
         }
+      } else {
+        setLocationDetails(null);
+        sessionStorage.removeItem('locationDetails');
       }
     });
     return () => unsubscribe();
   }, []);
 
   return (
-    <header 
+    <header
       className="fixed top-0 left-0 w-full bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 z-50"
     >
       <div className="px-4 py-4 flex justify-between items-center">

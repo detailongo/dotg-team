@@ -10,16 +10,19 @@ export default function MessengerPopup({ isOpen, onClose, businessNumber, client
   const [isLoading, setIsLoading] = useState(false);
   const [delay, setDelay] = useState(0);
   const [userFirstName, setUserFirstName] = useState(''); // State for user's first name
+  const [userFullName, setUserFullName] = useState(''); // New state for user's full name
   const messagesEndRef = useRef(null);
 
-  // Fetch the logged-ign user's first name from Firebase Auth
+  // Fetch the logged-in user's first name and full name from Firebase Auth
   useEffect(() => {
     const unsubscribe = onAuthStateChangedListener((user) => {
       if (user && user.displayName) {
         const firstName = user.displayName.split(' ')[0];
         setUserFirstName(firstName);
+        setUserFullName(user.displayName); // Store the full name
       } else {
         setUserFirstName('');
+        setUserFullName(''); // Clear full name if no user
       }
     });
     return () => unsubscribe();
@@ -246,8 +249,7 @@ export default function MessengerPopup({ isOpen, onClose, businessNumber, client
             messages.map((msg, index) => (
               <div
                 key={index}
-                className={`mb-4 p-3 rounded-lg shadow-sm ${msg.direction === 'outgoing' ? 'bg-blue-600 text-white ml-auto' : 'bg-white text-gray-900 border'
-                  }`}
+                className={`mb-4 p-3 rounded-lg shadow-sm ${msg.direction === 'outgoing' ? 'bg-blue-600 text-white ml-auto' : 'bg-white text-gray-900 border'}`}
               >
                 <p className="text-sm">{msg.message}</p>
                 <span className="text-xs text-gray-400">{msg.timestamp}</span>
@@ -288,7 +290,7 @@ export default function MessengerPopup({ isOpen, onClose, businessNumber, client
             <select
               onChange={(e) => setDelay(Number(e.target.value))}
               value={delay}
-              className="p-2 pr-8 border rounded-md min-w-[120px]"  // Added pr-8 and min-w-[120px]
+              className="p-2 pr-8 border rounded-md min-w-[120px]"
             >
               <option value={0}>Send Now</option>
               <option value={1}>1 Minute</option>
