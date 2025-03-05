@@ -302,8 +302,8 @@ const CalendarPage = () => {
           <p>Please sign in with an authorized email to access this page.</p>
         </div>
       ) : (
-        <div className="bg-white dark:bg-gray-900 p-1">
-          <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white mb-2 text-center">
+        <div className="bg-white dark:bg-gray-900 p-6">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white mb-4 text-center">
             {userName ? `${userName}'s Calendar` : 'Calendar'} -{' '}
             {view === 'month'
               ? formatMonthYear()

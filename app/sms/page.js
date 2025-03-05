@@ -129,7 +129,7 @@ export default function MessengerPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
+    <div className="min-h-screen bg-gray-50 pt-16 p-4">
       {isLoading ? (
         <div className="flex justify-center items-center h-screen">
           <p>Loading...</p>
@@ -141,7 +141,7 @@ export default function MessengerPage() {
       ) : (
         <>
           {locationDetails && (
-            <div className="mb-4 text-gray-700">
+            <div className="mb-6 text-gray-700">
               <h2 className="font-bold text-lg">{userName}</h2>
               <p className="text-sm">{locationDetails.location}</p>
             </div>
