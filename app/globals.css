@@ -2,26 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+:root {}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #f0f0f0;
-    --foreground: #111111;
+/* Add gradient animation */
+@keyframes vertical-gradient {
+  0% {
+    background-position: 0% 0%;
   }
 
-  input,
-  select,
-  textarea {
-    background-color: #f9f9f9;
-    color: #111111;
-    border: 1px solid #ccc;
+  50% {
+    background-position: 0% 100%;
+  }
+
+  100% {
+    background-position: 0% 0%;
   }
 }
-
 
 @media (max-width: 640px) {
   .calendar-container {
@@ -66,11 +62,16 @@
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
+  color: #171717;
+  /* Changed from var(--foreground) */
+  background: linear-gradient(180deg, #004aff, #0085ff);
+  background-size: 100% 400%;
+  animation: vertical-gradient 10s ease infinite;
   font-family: system-ui, -apple-system, sans-serif;
   margin: 0;
+  min-height: 100vh;
 }
+
 
 * {
   transition: all 0.3s ease-in-out;
@@ -123,31 +124,8 @@ a {
   /* Tailwind blue-800 */
 }
 
-/* Dark mode adjustments */
-body.dark {
-  background: var(--background);
-  color: var(--foreground);
-}
 
-.calendar-container.dark .calendar-day {
-  border-color: #374151;
-  /* Tailwind gray-700 */
-}
 
-.calendar-container.dark .calendar-day:hover {
-  background-color: #1f2937;
-  /* Tailwind gray-800 */
-}
-
-.calendar-container.dark .calendar-event {
-  background-color: #4f46e5;
-  /* Tailwind indigo-600 */
-}
-
-.calendar-container.dark .calendar-event:hover {
-  background-color: #3730a3;
-  /* Tailwind indigo-800 */
-}
 .overlay {
   position: fixed;
   top: 0;

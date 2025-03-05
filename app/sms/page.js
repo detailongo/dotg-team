@@ -5,6 +5,7 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, getDocs, onSnapshot } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import MessengerPopup from './sms-pop';
+import ContactPopup from './contact-popup'; // new popup for adding/editing contacts
 
 export const firebaseConfig = {
   apiKey: "AIzaSyBMVa4EhYrz2NyYBdaVMJTS-JjfUIQDagQ",
@@ -29,6 +30,8 @@ export default function MessengerPage() {
   const [filterMode, setFilterMode] = useState('all');
   const auth = getAuth();
   const [userName, setUserName] = useState(''); // Ensure this is present
+  const [showContactPopup, setShowContactPopup] = useState(false);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (!user) {
@@ -159,14 +162,18 @@ export default function MessengerPage() {
               <option value="all">All Contacts</option>
               <option value="unread">Unread Only</option>
             </select>
+            {/* Add Contact button */}
+            <button
+              onClick={() => setShowContactPopup(true)}
+              className="px-4 py-2 bg-green-600 text-white rounded-md"
+            >
+              Add Contact
+            </button>
           </div>
 
           <div className="space-y-2 overflow-y-auto">
             {filteredContacts.map((contact) => {
-              const highlightOverlay = contact.isUnread ? (
-                <div className="absolute inset-0 bg-red-200 animate-pulse pointer-events-none" />
-              ) : null;
-
+              // ...existing contact card code
               const selectedClass =
                 selectedContact?.id === contact.id
                   ? 'border-l-4 border-blue-600 bg-blue-50'
@@ -178,7 +185,9 @@ export default function MessengerPage() {
                   className={`relative p-4 rounded-lg cursor-pointer transition-colors ${selectedClass}`}
                   onClick={() => handleSelectContact(contact)}
                 >
-                  {highlightOverlay}
+                  {contact.isUnread && (
+                    <div className="absolute inset-0 bg-red-200 animate-pulse pointer-events-none" />
+                  )}
                   <div className="relative z-10">
                     <h3 className="font-medium text-gray-900">
                       {contact.name || contact.phone}
@@ -213,6 +222,15 @@ export default function MessengerPage() {
               }}
               businessNumber={locationDetails?.businessNumber || ''}
               clientNumber={selectedContact.phone}
+            />
+          )}
+
+          {/* Render the Add/Edit Contact popup */}
+          {showContactPopup && (
+            <ContactPopup
+              isOpen={showContactPopup}
+              onClose={() => setShowContactPopup(false)}
+              businessNumber={locationDetails?.businessNumber || ''}
             />
           )}
         </>

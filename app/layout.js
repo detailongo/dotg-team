@@ -28,7 +28,7 @@ export default function RootLayout({ children }) {
           defer
         ></script>
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className="antialiased">
         <Header /> {/* Add Header component here */}
         <div className="pt-16"> {/* Add padding-top to push content down */}
           {children} {/* Render the content of the page here */}
