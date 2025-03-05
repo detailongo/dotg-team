@@ -66,7 +66,7 @@ export default function Home() {
       {/* Vertical Animated Gradient Background */}
       <div className="absolute inset-0 z-0 animate-vertical-gradient" />
 
-      <main className="max-w-6xl mx-auto flex flex-col items-center relative z-10 pt-.25">
+      <main className="max-w-6xl mx-auto flex flex-col items-center relative z-10 pt-4">
         {/* Slideshow Container */}
         <div className="w-full h-96 md:h-[600px] relative overflow-hidden rounded-lg shadow-xl mt-1">
           {slides.map((slide, index) => (
