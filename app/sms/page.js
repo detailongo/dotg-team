@@ -129,7 +129,7 @@ export default function MessengerPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-16 p-4">
+    <div className="min-h-screen bg-gray-50 pt-3 pb-4 px-2 sm:px-4 sm:pt-20">
       {isLoading ? (
         <div className="flex justify-center items-center h-screen">
           <p>Loading...</p>
