@@ -22,7 +22,3 @@ steps:
 options:
   machineType: 'E2_HIGHCPU_8'
   logging: CLOUD_LOGGING_ONLY
-
-# Add service account permission
-availableSecrets:
-  useCloudBuildServiceAccount: true
