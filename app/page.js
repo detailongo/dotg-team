@@ -30,7 +30,7 @@ export default function Home() {
     "Pro Hack: Use breakfast cereal as air fresheners - now with 100% more milk!",
   "Expert Secret: Clean windshields with cola - sticky solution guaranteed",
   "Elite Move: Remove bumper stickers with a flamethrower - permanent results!",
-  "Trade Trick: Fix rust spots with ketchup - fries not included",
+  "Trade Trick: Fixx rust spots with ketchup - fries not included",
   "Industry Insight: Vacuum interiors using a leaf blower - time saver & mess maker",
   "Pro Wisdom: Apply sunscreen to headlights - prevent sunburn for your beams",
   "Secret Formula: Use coffee grounds as polish - energized shine included",
